@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 설정 및 엔진] ---
+# --- [1. 기초 엔진 및 PDF 추출] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -29,7 +29,6 @@ def to_int(val):
         return int(float(str(val).replace(',', '')))
     except: return 0
 
-# PDF 금액 추출 엔진 (마감작업용)
 def extract_data_from_pdf(files):
     data = {"매출액": "0", "매입액": "0", "세액": "0", "결과": "납부"}
     amt_pattern = r"[\d,]{4,15}" 
@@ -44,8 +43,7 @@ def extract_data_from_pdf(files):
                     amt = int(raw_amt)
                     data["결과"] = "환급" if "환급" in full_text_clean or amt < 0 else "납부"
                     data["세액"] = f"{abs(amt):,}"
-            is_sales = "매출" in file.name
-            is_purchase = "매입" in file.name
+            is_sales, is_purchase = "매출" in file.name, "매입" in file.name
             if (is_sales or is_purchase) and pages:
                 last_page_lines = pages[-1].split("\n")
                 for line in reversed(last_page_lines):
@@ -57,7 +55,6 @@ def extract_data_from_pdf(files):
                             break
     return data
 
-# PDF 생성 엔진 (매출매입장 변환용)
 def make_pdf_stream(data, title, biz_name, date_range):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -120,7 +117,7 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-st.set_page_config(page_title="세무 관리 시스템", layout="wide")
+st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
 
 with st.sidebar:
     st.markdown("### 📁 Menu")
@@ -131,17 +128,18 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메인 로직] ---
+# --- [3. 메뉴별 메인 로직] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
+# Menu 0: Home
 if curr == st.session_state.config["menu_0"]:
-    st.subheader("🔗 바로가기")
     c1, c2 = st.columns(2)
     with c1: st.link_button("WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
     with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
 
+# Menu 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
     st.subheader("📝 완성된 안내문 (복사용)")
     p_h = st.session_state.get("m1_pdf", [])
@@ -152,12 +150,13 @@ elif curr == st.session_state.config["menu_1"]:
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
         msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
         st.code(msg, language="text")
-    else: st.warning("PDF 파일들을 업로드하면 안내문이 자동 생성됩니다.")
+    else: st.warning("파일을 업로드하면 안내문이 자동 생성됩니다.")
     st.divider()
     col1, col2 = st.columns(2)
     with col1: st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf")
     with col2: st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
 
+# Menu 2: PDF 변환
 elif curr == st.session_state.config["menu_2"]:
     f_pdf = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="m2_up")
     if f_pdf:
@@ -177,6 +176,7 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
+# Menu 3: 카드 분리 (날짜 간소화 추가)
 elif curr == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
@@ -186,8 +186,14 @@ elif curr == st.session_state.config["menu_3"]:
         target_row = next((i for i, r in temp_df.iterrows() if any(k in " ".join(r.astype(str)) for k in ['카드번호', '매출금액'])), 0)
         df = pd.read_excel(card_up, header=target_row)
         
-        # 가공 로직
+        # 1. 불필요 열 삭제
         df = df.drop(columns=[c for c in df.columns if 'Unnamed' in str(c) or c in ['취소여부', '매출구분']])
+        
+        # 2. 이용일(날짜) 간소화 (YYYY-MM-DD 형식으로 고정)
+        dt_col = next((c for c in df.columns if '이용일' in str(c)), None)
+        if dt_col:
+            df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce').dt.strftime('%Y-%m-%d')
+        
         num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
         amt_col = next((c for c in df.columns if any(k in str(c) for k in ['매출금액', '금액', '합계'])), None)
         
@@ -198,11 +204,10 @@ elif curr == st.session_state.config["menu_3"]:
                     if pd.isna(c_num): continue
                     up_df = group.copy()
                     
-                    # --- [공급가액, 부가세 자동 계산 추가] ---
+                    # 3. 공급가액, 부가세 자동 계산
                     total_amt = pd.to_numeric(up_df[amt_col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                     up_df['공급가액'] = (total_amt / 1.1).round(0).astype(int)
                     up_df['부가세'] = total_amt.astype(int) - up_df['공급가액']
-                    # ----------------------------------------
                     
                     excel_buf = io.BytesIO()
                     with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
