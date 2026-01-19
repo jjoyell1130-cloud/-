@@ -11,31 +11,33 @@ if 'config' not in st.session_state:
     st.session_state.config = {
         "sidebar_title": "🗂️ 업무 메뉴",
         "sidebar_label": "업무 선택",
-        "main_title": "🚀 세무 업무 통합 대시보드",
         "menu_1": "⚖️ 매출매입장 PDF & 안내문",
         "menu_2": "💳 카드별 개별 엑셀 변환",
-        # 기본 안내 메세지 초기값
         "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
-        "sub_menu1": "국세청: 부가가치세 신고서 접수증, 부가세 신고서 업로드\n위하고: 매출,매입내역 엑셀 변환하여 업로드\n두가지 다 업로드 하면 환급금액 산출되어 안내문이 자동 작성되어요.",
-        "sub_menu2": "카드사별 엑셀 파일을 업로드하여 변환을 시작하세요."
-    }
+        "sub_menu1": "PDF와 엑셀을 업로드하면 아래 설정된 프롬프트 양식으로 안내문이 자동 생성됩니다.",
+        "sub_menu2": "카드사별 엑셀 파일을 업로드하여 변환을 시작하세요.",
+        # [복구] 안내문 자동 완성 프롬프트 양식
+        "prompt_template": """*2025 리베르떼-하반기 부가세 신고현황☆★환급
+감기 조심하시고 건강이 최고인거 아시죠? ^.<
 
-if 'link_data' not in st.session_state:
-    st.session_state.link_data = [
-        {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
-        {"name": "홈택스 (Hometax)", "url": "https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&menuCd=index3"},
-        {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"}
-    ]
+부가세 신고 마무리되어 전체 자료 전달드립니다.
+
+=첨부파일=
+-부가세 신고서
+-매출장: {매출액}원
+-매입장: {매입액}원
+-접수증 > {결과}: {세액}원
+
+☆★{결과}예정 8월 말 정도
+
+혹 확인 중에 변동사항이 있거나 궁금증이 생기시면 꼭 연락주세요!
+25일 까지는 수정이 가능합니다!"""
+    }
 
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
-        {"구분": "차량/교통", "주요 거래처": "유류대, 주차장, 하이패스", "분류": "공제유무확인", "계정명": "차량유지비", "코드": "822"},
-        {"구분": "여비/출장", "주요 거래처": "편의점, 모텔, 휴게소", "분류": "공제유무확인", "계정명": "여비교통비", "코드": "812"},
-        {"구분": "식대/복리", "주요 거래처": "식당, 병원", "분류": "공제유무확인", "계정명": "복리후생비", "코드": "811"}
+        {"구분": "차량/교통", "주요 거래처": "유류대", "분류": "공제유무확인", "계정명": "차량유지비", "코드": "822"}
     ]
-
-if 'memo_content' not in st.session_state:
-    st.session_state.memo_content = ""
 
 # --- [2. 유틸리티 함수] ---
 def to_int(val):
@@ -44,107 +46,75 @@ def to_int(val):
         return int(float(re.sub(r'[^0-9.-]', '', str(val))))
     except: return 0
 
-def format_date(val):
-    try:
-        if isinstance(val, (int, float)):
-            return pd.to_datetime(val, unit='D', origin='1899-12-30').strftime('%Y-%m-%d')
-        dt = pd.to_datetime(str(val), errors='coerce')
-        return dt.strftime('%Y-%m-%d') if not pd.isna(dt) else str(val)
-    except: return str(val)
-
-# --- [3. 기본 페이지 설정] ---
+# --- [3. 메인 화면 출력 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-# --- [4. 사이드바 설정 및 수정창] ---
+# --- [4. 사이드바 및 설정창] ---
 st.sidebar.title(st.session_state.config["sidebar_title"])
-
 menu_options = ["🏠 홈 (대시보드)", st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
-selected_menu = st.sidebar.pills(
-    label=st.session_state.config["sidebar_label"], 
-    options=menu_options, 
-    selection_mode="single", 
-    default="🏠 홈 (대시보드)"
-)
+selected_menu = st.sidebar.pills(label="Menu", options=menu_options, selection_mode="single", default="🏠 홈 (대시보드)")
 
-# 현재 메뉴 부제목 결정
-if selected_menu == "🏠 홈 (대시보드)":
-    current_subtitle = st.session_state.config["sub_home"]
-elif selected_menu == st.session_state.config["menu_1"]:
-    current_subtitle = st.session_state.config["sub_menu1"]
-else:
-    current_subtitle = st.session_state.config["sub_menu2"]
+# 현재 부제목 결정
+current_subtitle = st.session_state.config["sub_home"] if selected_menu == "🏠 홈 (대시보드)" else (st.session_state.config["sub_menu1"] if selected_menu == st.session_state.config["menu_1"] else st.session_state.config["sub_menu2"])
 
-st.sidebar.markdown("---")
-st.sidebar.info(current_subtitle)
-st.sidebar.markdown("---")
-
-# ⚙️ 명칭 및 안내문 수정창 (여기에 입력창이 모두 있습니다!)
-with st.sidebar.expander("⚙️ 명칭 및 안내문 수정"):
-    st.markdown("#### 🏠 홈 설정")
-    st.session_state.config["sub_home"] = st.text_area("홈 안내 메세지", st.session_state.config["sub_home"], height=80)
+with st.sidebar.expander("⚙️ 명칭 및 안내문 프롬프트 수정"):
+    st.markdown("### ⚖️ 메뉴 1 안내문 프롬프트 설정")
+    st.caption("{매출액}, {매입액}, {결과}, {세액} 변수가 자동으로 치환됩니다.")
+    st.session_state.config["prompt_template"] = st.text_area("안내문 양식(프롬프트)", st.session_state.config["prompt_template"], height=300)
     
     st.divider()
-    st.markdown("#### ⚖️ 메뉴 1 설정")
-    st.session_state.config["menu_1"] = st.text_input("메뉴 1 이름 수정", st.session_state.config["menu_1"])
-    # [핵심] 안내 메세지 입력창 확실히 노출
-    st.session_state.config["sub_menu1"] = st.text_area("메뉴 1 안내 메세지 입력", st.session_state.config["sub_menu1"], height=150)
+    st.session_state.config["sub_menu1"] = st.text_area("메인 화면 상단 설명", st.session_state.config["sub_menu1"])
     
-    st.divider()
-    st.markdown("#### 💳 메뉴 2 설정")
-    st.session_state.config["menu_2"] = st.text_input("메뉴 2 이름 수정", st.session_state.config["menu_2"])
-    st.session_state.config["sub_menu2"] = st.text_area("메뉴 2 안내 메세지 입력", st.session_state.config["sub_menu2"], height=100)
-    
-    if st.button("💾 모든 설정 즉시 반영"):
+    if st.button("💾 설정 저장"):
         st.rerun()
 
-# --- [5. 메인 화면 출력] ---
-
+# --- [5. 메인 화면 레이아웃] ---
 st.title(selected_menu)
-
-# 폰트 정렬 및 사이즈 (14px, 왼쪽 정렬) 적용
-st.markdown(
-    f"""
-    <div style="
-        font-size: 14px; 
-        line-height: 1.5; 
-        color: #555; 
-        text-align: left !important; 
-        width: 100%; 
-        padding: 0px !important;
-        margin: 0px !important;
-        white-space: pre-line;
-    ">
-        {current_subtitle}
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+st.markdown(f"<div style='font-size: 14px; line-height: 1.5; color: #555; text-align: left;'>{current_subtitle}</div>", unsafe_allow_html=True)
 st.divider()
 
-# --- [6. 메뉴별 로직] ---
-
+# --- [6. 메뉴별 기능] ---
 if selected_menu == "🏠 홈 (대시보드)":
-    st.subheader("🔗 바로가기")
-    cols = st.columns(3)
-    for i, item in enumerate(st.session_state.link_data):
-        cols[i % 3].link_button(item["name"], item["url"], use_container_width=True)
-    
-    st.divider()
-    st.subheader("⌨️ 차변 계정 단축키 관리")
-    df_accounts = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_accounts, num_rows="dynamic", use_container_width=True, key="home_editor")
-    if st.button("💾 계정 저장"):
-        st.session_state.account_data = edited_df.to_dict('records')
-        st.success("저장됨")
+    st.subheader("⌨️ 단축키 관리")
+    st.data_editor(pd.DataFrame(st.session_state.account_data), num_rows="dynamic", use_container_width=True)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # 매출매입장 PDF 분석 기능
-    tax_pdfs = st.file_uploader("📄 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        tax_pdfs = st.file_uploader("📄 1. 국세청 PDF (접수증/신고서)", type=['pdf'], accept_multiple_files=True)
+    with col2:
+        excel_ledgers = st.file_uploader("📊 2. 매출매입장 엑셀", type=['xlsx'], accept_multiple_files=True)
+    
     if tax_pdfs:
-        st.write("분석 중...")
+        final_reports = {}
+        for f in tax_pdfs:
+            with pdfplumber.open(f) as pdf:
+                text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
+                name_match = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", text)
+                biz_name = name_match.group(1).strip() if name_match else f.name.replace(".pdf","")
+                
+                if biz_name not in final_reports: 
+                    final_reports[biz_name] = {"매출": 0, "매입": 0, "세액": 0, "결과": "납부"}
+                
+                # 세액 추출 로직
+                vat_match = re.search(r"(?:납부할\s*세액|차가감납부할세액|환급받을\s*세액)\s*([0-9,.-]+)", text)
+                if vat_match:
+                    val = to_int(vat_match.group(1))
+                    final_reports[biz_name]["세액"] = abs(val)
+                    final_reports[biz_name]["결과"] = "환급" if "환급" in text or val < 0 else "납부"
+
+        # 결과 출력 및 프롬프트 적용
+        for name, data in final_reports.items():
+            with st.expander(f"✅ {name} 안내문 자동 생성 결과", expanded=True):
+                # 프롬프트 치환 적용
+                generated_msg = st.session_state.config["prompt_template"].format(
+                    매출액=f"{data['매출']:,}",
+                    매입액=f"{data['매입']:,}",
+                    결과=data['결과'],
+                    세액=f"{data['세액']:,}"
+                )
+                st.text_area("복사해서 사용하세요", generated_msg, height=250)
+                st.button(f"📋 {name} 안내문 복사", on_click=lambda: st.write("클립보드 복사 기능은 브라우저 보안상 직접 복사를 권장합니다."))
 
 elif selected_menu == st.session_state.config["menu_2"]:
-    # 카드 엑셀 변환 기능
-    uploaded_files = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
-    if uploaded_files:
-        st.write("변환 준비 중...")
+    st.info("카드 변환 기능을 이용하려면 파일을 업로드하세요.")
