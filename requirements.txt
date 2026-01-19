@@ -5,3 +5,8 @@ xlsxwriter
 pdfplumber
 reportlab
 xlrd>=2.0.1
+streamlit
+pandas
+openpyxl
+fpdf2
+xlsxwriter
