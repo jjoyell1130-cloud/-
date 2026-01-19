@@ -6,7 +6,13 @@ import zipfile
 import pdfplumber
 from datetime import datetime
 
-# --- [초기 기본값] 프로그램 시작 시 보일 기본 이름과 링크 ---
+# --- [세션 상태 초기화] 이름과 링크 데이터를 저장 ---
+if 'menu_names' not in st.session_state:
+    st.session_state.menu_names = {
+        "menu_1": "⚖️ 매출매입장 PDF & 안내문",
+        "menu_2": "💳 카드별 개별 엑셀 변환"
+    }
+
 if 'link_data' not in st.session_state:
     st.session_state.link_data = [
         {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
@@ -34,53 +40,59 @@ def format_date(val):
         return dt.strftime('%Y-%m-%d') if not pd.isna(dt) else str(val)
     except: return str(val)
 
-# --- 사이드바 메뉴 ---
+# --- 사이드바 메뉴 (수정된 이름 반영) ---
 st.sidebar.title("🗂️ 업무 메뉴")
-menu = st.sidebar.radio("업무 선택:", ["🏠 홈 (대시보드)", "⚖️ 매출매입장 PDF & 안내문", "💳 카드별 개별 엑셀 변환"])
+menu_options = ["🏠 홈 (대시보드)", st.session_state.menu_names["menu_1"], st.session_state.menu_names["menu_2"]]
+selected_menu = st.sidebar.radio("업무 선택:", menu_options)
 
-# --- [공통] 링크 및 이름 수정 설정창 ---
-with st.expander("⚙️ 바로가기 버튼 이름 및 주소 수정하기"):
-    st.write("버튼에 표시될 이름과 연결 주소를 자유롭게 수정하세요.")
-    new_link_data = []
+# --- [공통] 통합 설정창 (링크 + 메뉴명) ---
+with st.expander("⚙️ 전체 이름 및 링크 주소 수정하기"):
+    st.subheader("1. 사이드바 메뉴 이름 수정")
+    m_col1, m_col2 = st.columns(2)
+    with m_col1:
+        new_m1 = st.text_input("첫 번째 메뉴 이름", value=st.session_state.menu_names["menu_1"])
+    with m_col2:
+        new_m2 = st.text_input("두 번째 메뉴 이름", value=st.session_state.menu_names["menu_2"])
     
-    # 3행 2열 구조로 수정 입력칸 배치
+    st.divider()
+    
+    st.subheader("2. 바로가기 버튼 이름 및 주소 수정")
+    new_link_data = []
     for i in range(len(st.session_state.link_data)):
         col_n, col_u = st.columns([1, 2])
         with col_n:
-            updated_name = st.text_input(f"버튼 {i+1} 이름", value=st.session_state.link_data[i]["name"], key=f"name_{i}")
+            u_name = st.text_input(f"버튼 {i+1} 이름", value=st.session_state.link_data[i]["name"], key=f"n_{i}")
         with col_u:
-            updated_url = st.text_input(f"버튼 {i+1} 주소", value=st.session_state.link_data[i]["url"], key=f"url_{i}")
-        new_link_data.append({"name": updated_name, "url": updated_url})
+            u_url = st.text_input(f"버튼 {i+1} 주소", value=st.session_state.link_data[i]["url"], key=f"u_{i}")
+        new_link_data.append({"name": u_name, "url": u_url})
     
-    # 수정 사항 저장
-    if st.button("설정 저장하기"):
+    if st.button("💾 모든 설정 저장하기"):
+        st.session_state.menu_names["menu_1"] = new_m1
+        st.session_state.menu_names["menu_2"] = new_m2
         st.session_state.link_data = new_link_data
-        st.success("버튼 설정이 업데이트되었습니다!")
+        st.success("설정이 저장되었습니다! 메뉴 이름은 다음 조작 시 반영됩니다.")
+        st.rerun() # 즉시 반영을 위해 페이지 재실행
 
 # --- [1. 홈 화면] ---
-if menu == "🏠 홈 (대시보드)":
+if selected_menu == "🏠 홈 (대시보드)":
     st.title("🚀 세무 업무 통합 대시보드")
     st.markdown("---")
-    
     st.subheader("🔗 업무 바로가기")
     cols = st.columns(3)
-    
-    # 세션 상태에 저장된 이름과 링크로 버튼 생성
     for i, item in enumerate(st.session_state.link_data):
         cols[i % 3].link_button(item["name"], item["url"], use_container_width=True)
-    
     st.divider()
-    st.info("왼쪽 사이드바에서 업무를 선택하면 자동화 도구가 실행됩니다.")
+    st.info("왼쪽 사이드바에서 업무를 선택해 주세요.")
 
-# --- [2. 매출매입장 & 안내문] ---
-elif menu == "⚖️ 매출매입장 PDF & 안내문":
-    st.title("⚖️ 매출매입장 PDF 분석 및 안내문")
-    c1, c2 = st.columns(2)
-    with c1:
-        tax_pdfs = st.file_uploader("1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
-    with c2:
-        excel_ledgers = st.file_uploader("2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
-
+# --- [2. 매출매입장 로직] ---
+elif selected_menu == st.session_state.menu_names["menu_1"]:
+    st.title(st.session_state.menu_names["menu_1"])
+    # ... (기존 매출매입장 분석 로직)
+    st.info("분석할 파일을 업로드해 주세요.")
+    tax_pdfs = st.file_uploader("1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
+    excel_ledgers = st.file_uploader("2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
+    
+    # [이전과 동일한 PDF/엑셀 처리 로직 적용...]
     final_reports = {}
     if tax_pdfs:
         for f in tax_pdfs:
@@ -114,19 +126,16 @@ elif menu == "⚖️ 매출매입장 PDF & 안내문":
                 st.text_area("카톡 복사용", msg, height=150)
 
 # --- [3. 카드별 개별 엑셀 변환] ---
-elif menu == "💳 카드별 개별 엑셀 변환":
-    st.title("💳 카드매입 개별 분리 변환")
+elif selected_menu == st.session_state.menu_names["menu_2"]:
+    st.title(st.session_state.menu_names["menu_2"])
+    # ... (기존 카드 분리 로직 적용)
     uploaded_files = st.file_uploader("파일 업로드", type=['xlsx', 'xls', 'xlsm'], accept_multiple_files=True)
-    
     if uploaded_files:
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for file in uploaded_files:
                 fname = file.name
-                year = datetime.now().strftime('%Y')
-                company = "업체명"
-                brand = "카드"
-                
+                year, company, brand = datetime.now().strftime('%Y'), "업체명", "카드"
                 m = re.search(r'(\d{4})\s*([가-힣\w\s]+?)-', fname)
                 if m: year, company = m.group(1), m.group(2).strip()
                 if '국민' in fname: brand = "국민"
@@ -138,25 +147,20 @@ elif menu == "💳 카드별 개별 엑셀 변환":
                     row_s = "".join([str(v) for v in df_raw.iloc[i].values])
                     if any(k in row_s for k in ['카드번호', '이용일', '매출일', '승인일']):
                         h_idx = i; break
-                
                 file.seek(0)
                 df = pd.read_excel(file, header=h_idx)
                 df.columns = [str(c).strip() for c in df.columns]
-                
                 col_map = {'매출일자': ['이용일', '승인일', '매출일'], '카드번호': ['카드번호', '카드명'], 
                            '가맹점명': ['가맹점', '이용처'], '사업자번호': ['사업자', '등록번호'], '매출금액': ['금액', '합계', '이용금액']}
-                
                 tmp = pd.DataFrame()
                 for std, aliases in col_map.items():
                     act = next((c for c in df.columns if any(a in str(c) for a in aliases)), None)
                     tmp[std] = df[act] if act else ""
-                
                 tmp['매출일자'] = tmp['매출일자'].apply(format_date)
                 tmp['매출금액'] = tmp['매출금액'].apply(to_int)
                 tmp = tmp[tmp['매출금액'] > 0].copy()
                 tmp['공급가액'] = (tmp['매출금액'] / 1.1).round(0).astype(int)
                 tmp['부가세'] = tmp['매출금액'] - tmp['공급가액']
-                
                 tmp['C_ID'] = tmp['카드번호'].astype(str).apply(lambda x: re.sub(r'\D', '', x)[-4:] if len(re.sub(r'\D', '', x)) >= 4 else "0000")
                 for cid in tmp['C_ID'].unique():
                     f_df = tmp[tmp['C_ID'] == cid][['카드번호', '매출일자', '사업자번호', '가맹점명', '매출금액', '공급가액', '부가세']]
@@ -164,5 +168,4 @@ elif menu == "💳 카드별 개별 엑셀 변환":
                     buf = io.BytesIO()
                     f_df.to_excel(buf, index=False)
                     zf.writestr(new_name, buf.getvalue())
-        
-        st.download_button("📥 카드별 분리 파일(ZIP) 다운로드", zip_buffer.getvalue(), f"{company}_카드분리.zip", use_container_width=True)
+        st.download_button("📥 카드별 분리 파일(ZIP) 다운로드", zip_buffer.getvalue(), "카드분리.zip")
