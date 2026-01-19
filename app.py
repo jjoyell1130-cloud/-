@@ -40,7 +40,9 @@ if uploaded_files:
             # 텍스트 추출
             text = "".join([page.extract_text() for page in pdf.pages if page.extract_text()])
             
-            # 파일 이름에 따른 금액 추출 (줄바꿈 오류 방지)
+            # 파일 이름에 따른 금액 추출
             if "매출장" in file.name:
                 report_data["매출"] = extract_amount(text, "누계")
             elif "매입장" in file.name:
+                report_data["매입"] = extract_amount(text, "누계매입")
+            elif
