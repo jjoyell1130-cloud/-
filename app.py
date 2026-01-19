@@ -32,17 +32,17 @@ if 'config' not in st.session_state:
 25일 까지는 수정이 가능합니다!"""
     }
 
-# [완벽 복구] 바로가기 링크 5개 전체 리스트
+# [복구] 제공해주신 링크 5개 반영
 if 'link_data' not in st.session_state:
     st.session_state.link_data = [
-        {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
-        {"name": "🏠 홈택스 (Hometax)", "url": "https://hometax.go.kr/"},
-        {"name": "⚖️ 홈택스(수임업무)", "url": "https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&menuCd=index3"},
         {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
-        {"name": "📁 공유 폴더", "url": "https://naver.com"} # 실제 경로로 수정 가능
+        {"name": "📁 상반기 자료", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
+        {"name": "📁 하반기 자료", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
+        {"name": "💳 카드자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"},
+        {"name": "🏠 홈택스", "url": "https://hometax.go.kr/"} 
     ]
 
-# [완벽 복구] 차변 계정 단축키 전체 리스트
+# [복구] 차변 계정 단축키 전체 리스트
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"구분": "차량/교통", "주요 거래처": "유류대, 주차장, 하이패스", "분류": "공제유무확인", "계정명": "차량유지비", "코드": "822"},
@@ -86,7 +86,6 @@ st.divider()
 
 if selected_menu == "🏠 홈 (대시보드)":
     st.subheader("🔗 바로가기")
-    # 5개 링크를 깔끔하게 배치하기 위해 columns 조절
     link_cols = st.columns(5)
     for i, item in enumerate(st.session_state.link_data):
         link_cols[i].link_button(item["name"], item["url"], use_container_width=True)
@@ -94,7 +93,7 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.divider()
     
     st.subheader("⌨️ 차변 계정 단축키 관리")
-    edited_df = st.data_editor(pd.DataFrame(st.session_state.account_data), num_rows="dynamic", use_container_width=True, key="home_acc_edit")
+    edited_df = st.data_editor(pd.DataFrame(st.session_state.account_data), num_rows="dynamic", use_container_width=True, key="main_acc_editor")
     if st.button("💾 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
         st.success("리스트가 저장되었습니다.")
@@ -105,7 +104,6 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.session_state.memo_content = st.text_area("메모를 입력하세요", value=st.session_state.memo_content, height=200)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # 상단 안내문 양식 편집 (항상 노출)
     with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=True):
         st.session_state.config["prompt_template"] = st.text_area("양식 수정", st.session_state.config["prompt_template"], height=250)
         st.caption("변수: {업체명}, {매출액}, {매입액}, {결과}, {세액}")
@@ -116,7 +114,6 @@ elif selected_menu == st.session_state.config["menu_1"]:
     with c1: pdf_files = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
     with c2: xls_files = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
     
-    # PDF 분석 및 안내문 출력 로직 (이전과 동일)
     if pdf_files:
         reports = {}
         for f in pdf_files:
@@ -130,19 +127,4 @@ elif selected_menu == st.session_state.config["menu_1"]:
                     if v_match:
                         val = to_int(v_match.group(1))
                         reports[biz]["세액"] = abs(val)
-                        reports[biz]["결과"] = "환급" if "환급" in txt or val < 0 else "납부"
-            except: pass
-        
-        if reports:
-            st.subheader("📩 생성된 안내문")
-            for biz, data in reports.items():
-                msg = st.session_state.config["prompt_template"].format(
-                    업체명=data['업체명'], 매출액=f"{data['매출']:,}", 매입액=f"{data['매입']:,}", 
-                    결과=data['결과'], 세액=f"{data['세액']:,}"
-                )
-                st.text_area(f"🏢 {biz} 안내문", msg, height=250, key=f"res_{biz}")
-                st.divider()
-
-elif selected_menu == st.session_state.config["menu_2"]:
-    st.info("카드 변환 메뉴입니다. 엑셀 파일을 업로드해주세요.")
-    st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
+                        reports[biz]["결과"] = "환급" if "환급" in txt or val < 0
