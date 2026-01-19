@@ -1,186 +1,111 @@
 import streamlit as st
 import pandas as pd
 import io
-import zipfile
+from fpdf import FPDF
+from datetime import datetime
 
-# --- [1. 세션 상태 및 설정 초기화] ---
+# --- [PDF 생성 클래스 정의] ---
+class ReportPDF(FPDF):
+    def header(self):
+        # 폰트 설정 (한글 폰트 경로가 필요합니다. 예: 'NanumGothic.ttf')
+        try:
+            self.add_font('Nanum', '', 'NanumGothic.ttf', unicode=True)
+            self.set_font('Nanum', '', 16)
+        except:
+            self.set_font('Arial', 'B', 16)
+        
+        self.cell(0, 10, self.report_title, ln=True, align='C')
+        self.set_font('Nanum' if 'Nanum' in self.fonts else 'Arial', '', 10)
+        self.cell(0, 10, f"출력일자: {datetime.now().strftime('%Y-%m-%d')}", ln=True, align='R')
+        self.ln(5)
+
+    def draw_table(self, df):
+        # 컬럼 너비 설정
+        col_width = self.epw / len(df.columns)
+        self.set_fill_color(240, 240, 240)
+        
+        # 헤더
+        for col in df.columns:
+            self.cell(col_width, 10, str(col), border=1, align='C', fill=True)
+        self.ln()
+        
+        # 데이터 라인
+        self.set_fill_color(255, 255, 255)
+        for _, row in df.iterrows():
+            for val in row:
+                self.cell(col_width, 10, str(val), border=1, align='C')
+            self.ln()
+
+# --- [기존 세션 상태 설정 유지] ---
 if 'config' not in st.session_state:
     st.session_state.config = {
-        "menu_0": "🏠 Home", 
-        "menu_1": "⚖️ 마감작업", 
-        "menu_2": "💳 카드매입 수기입력건",
-        "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성되고 업체별로 파일이 분리됩니다.",
-        "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
-        "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
-감기 조심하시고 건강이 최고인거 아시죠? ^.<
-
-부가세 신고 마무리되어 전체 자료 전달드립니다.
-
-=첨부파일=
--부가세 신고서
--매출장: {매출액}원
--매입장: {매입액}원
--접수증 > {결과}: {세액}원
-
-☆★{결과}예정 8월 말 정도
-
-혹 확인 중에 변동사항이 있거나 궁금증이 생기시면 꼭 연락주세요!
-25일 까지는 수정이 가능합니다!"""
+        "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", "menu_2": "💳 카드매입 수기입력건",
+        "prompt_template": "*(업체명) 부가세 신고현황..."
     }
-
-if 'daily_memo' not in st.session_state:
-    st.session_state.daily_memo = ""
-
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-if 'link_group_2' not in st.session_state:
-    st.session_state.link_group_2 = [
-        {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
-        {"name": "📁 상반기 자료", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
-        {"name": "📁 하반기 자료", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
-        {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
-    ]
-
-if 'account_data' not in st.session_state:
-    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"}, {"단축키": "812", "거래처": "편의점", "계정명": "여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "830", "거래처": "다이소", "계정명": "소모품비", "분류": "매입"}, {"단축키": "811", "거래처": "식당", "계정명": "복리후생비", "분류": "공제유무확인후 분류"}, {"단축키": "146", "거래처": "거래처", "계정명": "상품", "분류": "매입"}, {"단축키": "830", "거래처": "홈쇼핑, 인터넷구매", "계정명": "소모품비", "분류": "매입"}, {"단축키": "822", "거래처": "주차장, 적은금액세금", "계정명": "차량유지비", "분류": "일반"}, {"단축키": "-", "거래처": "휴게소", "계정명": "차량/여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "-", "거래처": "전기요금", "계정명": "전력비", "분류": "매입"}, {"단축키": "-", "거래처": "수도요금", "계정명": "수도광열비", "분류": "일반"}, {"단축키": "814", "거래처": "통신비", "계정명": "통신비", "분류": "매입"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "세금과공과", "분류": "일반"}, {"단축키": "830", "거래처": "약국", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "모텔", "계정명": "출장비/여비교통비", "분류": "일반"}, {"단축키": "831", "거래처": "캡스, 보안, 홈페이지", "계정명": "지급수수료", "분류": "매입"}, {"단축키": "-", "거래처": "아울렛(작업복)", "계정명": "소모품비", "분류": "매입"}, {"단축키": "820", "거래처": "컴퓨터 AS", "계정명": "수선비", "분류": "매입"}, {"단축키": "830", "거래처": "결제대행업체", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "신용카드 알림", "계정명": "지급수수료", "분류": "일반"}, {"단축키": "-", "거래처": "휴대폰 소액결제", "계정명": "소모품비", "분류": "일반"}, {"단축키": "146", "거래처": "매입 항목", "계정명": "상품", "분류": "매입"}, {"단축키": "-", "거래처": "병원", "계정명": "복리후생비", "분류": "일반"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "로카모빌리티", "계정명": "소모품비", "분류": "일반"}, {"단축키": "831", "거래처": "소프트웨어 개발/공급", "계정명": "지급수수료", "분류": "지급수수료"}]
-
-# --- [2. 스타일 설정] ---
+# --- [사이드바 및 기본 UI] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-st.markdown("""
-    <style>
-    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
-    h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
-    
-    /* 사이드바 회색 강조 디자인 */
-    section[data-testid="stSidebar"] div.stButton > button {
-        width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
-        padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
-    }
-    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- [사이드바 구성] ---
 with st.sidebar:
     st.markdown("### 📁 Menu")
-    st.write("")
-    
-    menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
-    
-    for m_name in menu_items:
-        is_selected = (st.session_state.selected_menu == m_name)
-        if st.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
+    for m_name in [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]:
+        if st.button(m_name, use_container_width=True, type="primary" if st.session_state.selected_menu == m_name else "secondary"):
             st.session_state.selected_menu = m_name
             st.rerun()
 
-    for _ in range(15):
-        st.write("")
+# --- [메인 로직: 마감작업] ---
+if st.session_state.selected_menu == st.session_state.config["menu_1"]:
+    st.title("⚖️ 마감작업 (매출매입장 PDF 변환)")
     
-    st.divider()
-    
-    st.markdown("#### 📝 Memo")
-    side_memo = st.text_area(
-        "Memo Content", 
-        value=st.session_state.daily_memo, 
-        height=200, 
-        placeholder="여기에 메모를 입력하세요...",
-        label_visibility="collapsed",
-        key="memo_input_area"
-    )
-    if st.button("💾 저장", use_container_width=True, key="memo_save_btn"):
-        st.session_state.daily_memo = side_memo
-        st.success("저장되었습니다.")
+    uploaded_file = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'])
 
-# --- [3. 메인 화면 출력] ---
-current_menu = st.session_state.selected_menu
-st.title(current_menu)
-
-if current_menu != st.session_state.config["menu_0"]:
-    sub_text = st.session_state.config["sub_menu1"] if current_menu == st.session_state.config["menu_1"] else st.session_state.config["sub_menu2"]
-    st.markdown(f"<p style='color: #666; font-size: 15px;'>{sub_text}</p>", unsafe_allow_html=True)
-
-st.divider()
-
-# --- [4. 메뉴별 상세 기능] ---
-if current_menu == st.session_state.config["menu_0"]:
-    st.subheader("🔗 바로가기")
-    c1, c2 = st.columns(2)
-    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
-    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
-    
-    st.write("")
-    c3, c4, c5, c6 = st.columns(4)
-    links = st.session_state.link_group_2
-    with c3: st.link_button(links[0]["name"], links[0]["url"], use_container_width=True)
-    with c4: st.link_button(links[1]["name"], links[1]["url"], use_container_width=True)
-    with c5: st.link_button(links[2]["name"], links[2]["url"], use_container_width=True)
-    with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
-    
-    st.divider()
-    st.subheader("⌨️ 차변계정 단축키")
-    df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor")
-    if st.button("💾 리스트 저장", key="acc_save_btn"):
-        st.session_state.account_data = edited_df.to_dict('records')
-        st.success("데이터가 저장되었습니다.")
-
-elif current_menu == st.session_state.config["menu_1"]:
-    with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
-        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=200, key="template_input")
-        if st.button("💾 안내문 양식 저장", key="template_save_btn"):
-            st.session_state.config["prompt_template"] = u_template
-            st.success("저장되었습니다.")
-    st.divider()
-    
-    st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True, key="pdf_uploader")
-    
-    # --- 매출매입장 엑셀 업로드 및 변환 로직 ---
-    uploaded_excels = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True, key="excel_uploader")
-    
-    if uploaded_excels:
-        if st.button("🚀 업체별 파일 분리 및 압축 시작", key="convert_btn"):
-            zip_buffer = io.BytesIO()
-            file_count = 0
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+        
+        # 1. 필터링 및 분리 (구분 컬럼이 '매출', '매입' 혹은 '구분'이라고 가정)
+        # 엑셀 양식에 따라 '구분' 컬럼명을 수정하세요.
+        type_col = next((c for c in ['구분', '유형', '매출매입'] if c in df.columns), None)
+        biz_name_col = next((c for c in ['상호', '업체명', '거래처'] if c in df.columns), "업체")
+        
+        if type_col:
+            st.success("✅ 데이터를 성공적으로 분석했습니다.")
             
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                for uploaded_file in uploaded_excels:
-                    # 엑셀 읽기
-                    df = pd.read_excel(uploaded_file)
-                    
-                    # '거래처' 혹은 '상호' 컬럼 찾기
-                    col_name = next((c for c in ['거래처', '상호', '업체명', '거래처명'] if c in df.columns), None)
-                    
-                    if col_name:
-                        unique_biz = df[col_name].unique()
-                        for biz in unique_biz:
-                            if pd.isna(biz): continue
-                            
-                            biz_df = df[df[col_name] == biz]
-                            
-                            # 업체별 엑셀 파일 생성
-                            output = io.BytesIO()
-                            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                biz_df.to_excel(writer, index=False, sheet_name='매출매입장')
-                            
-                            # 압축 파일에 추가
-                            zip_file.writestr(f"{str(biz)}_매출매입장.xlsx", output.getvalue())
-                            file_count += 1
-                    else:
-                        st.error(f"'{uploaded_file.name}'에서 업체명을 구분할 컬럼(거래처, 상호 등)을 찾을 수 없습니다.")
+            # 매출/매입 분리
+            sales_df = df[df[type_col].str.contains('매출', na=False)]
+            purchase_df = df[df[type_col].str.contains('매입', na=False)]
+            
+            biz_name = df[biz_name_col].iloc[0] if not df.empty else "알수없음"
+            today_str = datetime.now().strftime('%Y%m%d')
 
-            if file_count > 0:
-                st.success(f"✅ 총 {file_count}개의 업체별 파일이 생성되었습니다!")
-                st.download_button(
-                    label="📥 변환된 압축파일(ZIP) 다운로드",
-                    data=zip_buffer.getvalue(),
-                    file_name="매출매입장_업체별분리.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
+            col1, col2 = st.columns(2)
 
-elif current_menu == st.session_state.config["menu_2"]:
-    st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True, key="card_uploader")
+            # --- 매출장 PDF 생성 ---
+            with col1:
+                st.subheader("📈 매출내역")
+                st.dataframe(sales_df, use_container_width=True)
+                if st.button("📥 매출장 PDF 생성"):
+                    pdf = ReportPDF()
+                    pdf.report_title = f"[{biz_name}] 매출장"
+                    pdf.add_page()
+                    pdf.draw_table(sales_df)
+                    pdf_output = pdf.output(dest='S')
+                    st.download_button(f"{biz_name}_매출장_{today_str}.pdf", pdf_output, file_name=f"{biz_name}_매출장_{today_str}.pdf")
+
+            # --- 매입장 PDF 생성 ---
+            with col2:
+                st.subheader("📉 매입내역")
+                st.dataframe(purchase_df, use_container_width=True)
+                if st.button("📥 매입장 PDF 생성"):
+                    pdf = ReportPDF()
+                    pdf.report_title = f"[{biz_name}] 매입장"
+                    pdf.add_page()
+                    pdf.draw_table(purchase_df)
+                    pdf_output = pdf.output(dest='S')
+                    st.download_button(f"{biz_name}_매입장_{today_str}.pdf", pdf_output, file_name=f"{biz_name}_매입장_{today_str}.pdf")
+        else:
+            st.error("엑셀에서 '구분(매출/매입)' 컬럼을 찾을 수 없습니다.")
+
+else:
+    st.write("다른 메뉴를 선택하셨습니다.")
