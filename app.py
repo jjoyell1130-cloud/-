@@ -14,10 +14,10 @@ if 'config' not in st.session_state:
         "main_title": "🚀 세무 업무 통합 대시보드",
         "menu_1": "⚖️ 매출매입장 PDF & 안내문",
         "menu_2": "💳 카드별 개별 엑셀 변환",
-        # 부제목 초기값 설정
+        # 부제목 초기값 (이미지 예시 반영)
         "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
-        "sub_menu1": "⚖️ PDF 파일을 업로드하여 분석을 시작하세요.",
-        "sub_menu2": "💳 카드사별 엑셀 파일을 업로드하여 변환을 시작하세요."
+        "sub_menu1": "국세청: 부가가치세 신고서 접수증, 부가세 신고서 업로드\n위하고: 매출,매입내역 엑셀 변환하여 업로드\n두가지 다 업로드 하면 환급금액 산출되어 안내문이 자동 작성되어요.",
+        "sub_menu2": "카드사별 엑셀 파일을 업로드하여 변환을 시작하세요."
     }
 
 if 'link_data' not in st.session_state:
@@ -57,10 +57,9 @@ def format_date(val):
 # --- [3. 기본 페이지 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-# --- [4. 사이드바 디자인 및 메뉴] ---
+# --- [4. 사이드바 디자인 및 설정] ---
 st.sidebar.title(st.session_state.config["sidebar_title"])
 
-# 업무 선택 버튼 (Pills 스타일)
 menu_options = ["🏠 홈 (대시보드)", st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
 selected_menu = st.sidebar.pills(
     label=st.session_state.config["sidebar_label"], 
@@ -69,24 +68,19 @@ selected_menu = st.sidebar.pills(
     default="🏠 홈 (대시보드)"
 )
 
-# 현재 선택된 메뉴에 따른 부제목 결정
-current_subtitle = ""
+# 현재 선택된 메뉴의 부제목 가져오기
 if selected_menu == "🏠 홈 (대시보드)":
     current_subtitle = st.session_state.config["sub_home"]
 elif selected_menu == st.session_state.config["menu_1"]:
     current_subtitle = st.session_state.config["sub_menu1"]
-elif selected_menu == st.session_state.config["menu_2"]:
+else:
     current_subtitle = st.session_state.config["sub_menu2"]
 
-# 사이드바에 부제목 표시
 st.sidebar.markdown("---")
 st.sidebar.info(current_subtitle)
 st.sidebar.markdown("---")
 
-# 설정창 (명칭 및 부제목 수정)
 with st.sidebar.expander("⚙️ 명칭 및 부제목 수정"):
-    st.session_state.config["main_title"] = st.text_input("메인 화면 제목", st.session_state.config["main_title"])
-    st.divider()
     st.session_state.config["sub_home"] = st.text_area("🏠 홈 부제목", st.session_state.config["sub_home"])
     st.divider()
     st.session_state.config["menu_1"] = st.text_input("⚖️ 메뉴1 이름", st.session_state.config["menu_1"])
@@ -94,60 +88,71 @@ with st.sidebar.expander("⚙️ 명칭 및 부제목 수정"):
     st.divider()
     st.session_state.config["menu_2"] = st.text_input("💳 메뉴2 이름", st.session_state.config["menu_2"])
     st.session_state.config["sub_menu2"] = st.text_area("💳 메뉴2 부제목", st.session_state.config["sub_menu2"])
-    
-    if st.button("💾 설정 반영"):
+    if st.button("💾 설정 저장"):
         st.rerun()
 
-# --- [5. 메인 화면 로직] ---
+# --- [5. 메인 화면 레이아웃 및 폰트 설정] ---
 
-# 메인 제목 및 연동된 부제목 표시
 st.title(selected_menu)
-st.markdown(f"#### {current_subtitle}") # 부제목 표시 부분
+
+# 부제목 커스텀 스타일 적용 (폰트 사이즈 통일 및 행간 축소)
+st.markdown(
+    f"""
+    <div style="font-size: 14px; line-height: 1.4; color: #555; margin-bottom: 20px; white-space: pre-wrap;">
+        {current_subtitle}
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 st.divider()
 
-# --- [메뉴별 기능 구현] ---
+# --- [6. 메뉴별 기능 구현] ---
 
 if selected_menu == "🏠 홈 (대시보드)":
-    # 바로가기 버튼
     st.subheader("🔗 바로가기")
     cols = st.columns(3)
     for i, item in enumerate(st.session_state.link_data):
         cols[i % 3].link_button(item["name"], item["url"], use_container_width=True)
     
     st.divider()
-    # 단축키 관리 테이블
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_accounts = pd.DataFrame(st.session_state.account_data)
     edited_df = st.data_editor(
         df_accounts, num_rows="dynamic", use_container_width=True,
         column_config={"분류": st.column_config.SelectboxColumn("분류", options=["매입", "일반", "공제유무확인"], required=True)},
-        key="main_editor"
+        key="home_editor"
     )
     if st.button("💾 계정 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
-        st.success("저장 완료!")
+        st.success("저장되었습니다!")
     
     st.divider()
     st.subheader("📝 업무 메모")
-    st.session_state.memo_content = st.text_area("내용 입력", value=st.session_state.memo_content, height=150)
+    st.session_state.memo_content = st.text_area("공통 메모", value=st.session_state.memo_content, height=150)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # --- 매출매입장 PDF 분석 로직 복구 ---
-    tax_pdfs = st.file_uploader("1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
-    excel_ledgers = st.file_uploader("2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
+    # 매출매입장 분석 로직
+    col1, col2 = st.columns(2)
+    with col1:
+        tax_pdfs = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
+    with col2:
+        excel_ledgers = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
     
     if tax_pdfs:
         final_reports = {}
         for f in tax_pdfs:
-            with pdfplumber.open(f) as pdf:
-                text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
-                name_match = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", text)
-                biz_name = name_match.group(1).strip() if name_match else f.name.split('_')[0]
-                if biz_name not in final_reports: final_reports[biz_name] = {"vat": 0}
-                vat_match = re.search(r"(?:납부할\s*세액|차가감납부할세액|환급받을\s*세액)\s*([0-9,.-]+)", text)
-                if vat_match:
-                    val = to_int(vat_match.group(1))
-                    final_reports[biz_name]["vat"] = -val if "환급" in text else val
+            try:
+                with pdfplumber.open(f) as pdf:
+                    text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
+                    name_match = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", text)
+                    biz_name = name_match.group(1).strip() if name_match else f.name.replace(".pdf","")
+                    if biz_name not in final_reports: final_reports[biz_name] = {"vat": 0}
+                    vat_match = re.search(r"(?:납부할\s*세액|차가감납부할세액|환급받을\s*세액)\s*([0-9,.-]+)", text)
+                    if vat_match:
+                        val = to_int(vat_match.group(1))
+                        final_reports[biz_name]["vat"] = -val if "환급" in text else val
+            except:
+                st.error(f"{f.name} 파일을 읽는 중 오류가 발생했습니다.")
         
         if final_reports:
             for name, info in final_reports.items():
@@ -155,8 +160,8 @@ elif selected_menu == st.session_state.config["menu_1"]:
                     st.metric("예상 세액", f"{info.get('vat', 0):,} 원")
 
 elif selected_menu == st.session_state.config["menu_2"]:
-    # --- 카드별 엑셀 변환 로직 복구 ---
-    uploaded_files = st.file_uploader("카드사 엑셀 업로드", type=['xlsx', 'xls', 'xlsm'], accept_multiple_files=True)
+    # 카드 엑셀 변환 로직
+    uploaded_files = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx', 'xls', 'xlsm'], accept_multiple_files=True)
     
     if uploaded_files:
         zip_buffer = io.BytesIO()
@@ -167,7 +172,7 @@ elif selected_menu == st.session_state.config["menu_2"]:
                     h_idx = 0
                     for i in range(min(40, len(df_raw))):
                         row_s = "".join([str(v) for v in df_raw.iloc[i].values])
-                        if any(k in row_s for k in ['카드번호', '이용일', '매출일']):
+                        if any(k in row_s for k in ['카드번호', '이용일', '매출일', '승인일']):
                             h_idx = i; break
                     
                     file.seek(0)
@@ -185,12 +190,12 @@ elif selected_menu == st.session_state.config["menu_2"]:
                     if not tmp.empty:
                         tmp['매출일자'] = tmp['매출일자'].apply(format_date)
                         tmp['매출금액'] = tmp['매출금액'].apply(to_int)
-                        # 결과 저장
+                        # 변환 결과 저장
                         buf = io.BytesIO()
                         tmp.to_excel(buf, index=False)
-                        zf.writestr(f"converted_{file.name}", buf.getvalue())
+                        zf.writestr(f"변환_{file.name}", buf.getvalue())
                 except Exception as e:
-                    st.error(f"{file.name} 처리 중 오류 발생: {e}")
+                    st.error(f"{file.name} 처리 중 오류: {e}")
         
         if zip_buffer.getvalue():
             st.download_button("📥 변환 완료 파일(ZIP) 다운로드", zip_buffer.getvalue(), "카드자료변환.zip")
