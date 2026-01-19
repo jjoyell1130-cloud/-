@@ -7,7 +7,7 @@ if 'config' not in st.session_state:
         "menu_0": "🏠 Home", 
         "menu_1": "⚖️ 마감작업", 
         "menu_2": "💳 카드매입 수기입력건",
-        "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
+        # Home 부제목은 사용하지 않으므로 삭제 처리
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
@@ -47,7 +47,7 @@ st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
     <style>
-    /* 전체 왼쪽 정렬 강제 고정 */
+    /* 전체 왼쪽 정렬 고정 */
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; margin-right: auto !important; text-align: left !important; }
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
@@ -80,8 +80,10 @@ st.markdown("""
         color: #111;
     }
     
-    /* 파일 업로더 및 에디터 내부 정렬 보정 */
-    .stFileUploader section { text-align: left !important; }
+    /* 박스 콘텐츠(업로더, 에디터 등) 내부 왼쪽 정렬 */
+    .stFileUploader section, .stFileUploader label { text-align: left !important; align-items: flex-start !important; }
+    .stTextArea textarea { text-align: left !important; }
+    [data-testid="stExpander"] div { text-align: left !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -109,12 +111,14 @@ for m_name in menu_items:
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-sub_map = {
-    st.session_state.config["menu_0"]: st.session_state.config["sub_home"],
-    st.session_state.config["menu_1"]: st.session_state.config["sub_menu1"],
-    st.session_state.config["menu_2"]: st.session_state.config["sub_menu2"]
-}
-st.markdown(f"<p style='color: #666; font-size: 15px;'>{sub_map[current_menu]}</p>", unsafe_allow_html=True)
+# 부제목 출력 로직 (Home 메뉴일 때는 부제목을 출력하지 않음)
+if current_menu != st.session_state.config["menu_0"]:
+    sub_map = {
+        st.session_state.config["menu_1"]: st.session_state.config["sub_menu1"],
+        st.session_state.config["menu_2"]: st.session_state.config["sub_menu2"]
+    }
+    st.markdown(f"<p style='color: #666; font-size: 15px;'>{sub_map[current_menu]}</p>", unsafe_allow_html=True)
+
 st.divider()
 
 # --- [4. 메뉴별 상세 기능] ---
@@ -136,13 +140,13 @@ if current_menu == st.session_state.config["menu_0"]:
     st.divider()
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_v4")
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_vfinal")
     if st.button("💾 리스트 저장", key="btn_save_acc"):
         st.session_state.account_data = edited_df.to_dict('records')
         st.success("데이터가 안전하게 저장되었습니다.")
 
 elif current_menu == st.session_state.config["menu_1"]:
-    with st.expander("💬 카카오톡 전송용 안내문", expanded=True):
+    with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
         u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=250)
         if st.button("💾 안내문 양식 저장", key="btn_save_msg"):
             st.session_state.config["prompt_template"] = u_template
