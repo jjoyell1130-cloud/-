@@ -30,7 +30,7 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-# 데이터 초기화 (링크 및 단축키)
+# [데이터 복구] 사라졌던 단축키 데이터 25종 전체 복구
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"},
@@ -38,16 +38,42 @@ if 'account_data' not in st.session_state:
         {"단축키": "830", "거래처": "다이소", "계정명": "소모품비", "분류": "매입"},
         {"단축키": "811", "거래처": "식당", "계정명": "복리후생비", "분류": "공제유무확인후 분류"},
         {"단축키": "146", "거래처": "거래처", "계정명": "상품", "분류": "매입"},
-        # ... (이하 단축키 데이터 생략 가능하나 코드 안정성을 위해 유지)
+        {"단축키": "830", "거래처": "홈쇼핑, 인터넷구매", "계정명": "소모품비", "분류": "매입"},
+        {"단축키": "822", "거래처": "주차장, 적은금액세금", "계정명": "차량유지비", "분류": "일반"},
+        {"단축키": "-", "거래처": "휴게소", "계정명": "차량/여비교통비", "분류": "공제유무확인후 분류"},
+        {"단축키": "-", "거래처": "전기요금", "계정명": "전력비", "분류": "매입"},
+        {"단축키": "-", "거래처": "수도요금", "계정명": "수도광열비", "분류": "일반"},
+        {"단축키": "814", "거래처": "통신비", "계정명": "통신비", "분류": "매입"},
+        {"단축키": "-", "거래처": "금융결제원", "계정명": "세금과공과", "분류": "일반"},
+        {"단축키": "830", "거래처": "약국", "계정명": "소모품비", "분류": "일반"},
+        {"단축키": "-", "거래처": "모텔", "계정명": "출장비/여비교통비", "분류": "일반"},
+        {"단축키": "831", "거래처": "캡스, 보안, 홈페이지", "계정명": "지급수수료", "분류": "매입"},
+        {"단축키": "-", "거래처": "아울렛(작업복)", "계정명": "소모품비", "분류": "매입"},
+        {"단축키": "820", "거래처": "컴퓨터 AS", "계정명": "수선비", "분류": "매입"},
+        {"단축키": "830", "거래처": "결제대행업체", "계정명": "소모품비", "분류": "일반"},
+        {"단축키": "-", "거래처": "신용카드 알림", "계정명": "지급수수료", "분류": "일반"},
+        {"단축키": "-", "거래처": "휴대폰 소액결제", "계정명": "소모품비", "분류": "일반"},
+        {"단축키": "146", "거래처": "매입 항목", "계정명": "상품", "분류": "매입"},
+        {"단축키": "-", "거래처": "병원", "계정명": "복리후생비", "분류": "일반"},
+        {"단축키": "-", "거래처": "금융결제원", "계정명": "소모품비", "분류": "일반"},
+        {"단축키": "-", "거래처": "로카모빌리티", "계정명": "소모품비", "분류": "일반"},
+        {"단축키": "831", "거래처": "소프트웨어 개발/공급", "계정명": "지급수수료", "분류": "지급수수료"}
     ]
 
-# --- [2. 사이드바 디자인: Menu] ---
+# --- [2. 스타일 및 사이드바 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-st.sidebar.title("📁 Menu") # 제목 수정
+# 모든 텍스트 왼쪽 정렬 강제 스타일
+st.markdown("""
+    <style>
+    .main .block-container {text-align: left !important;}
+    div.stMarkdown {text-align: left !important;}
+    </style>
+    """, unsafe_allow_html=True)
+
+st.sidebar.title("📁 Menu")
 st.sidebar.write("업무 선택")
 
-# 버튼형 메뉴 구현
 for menu_name in [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]:
     if st.sidebar.button(menu_name, use_container_width=True):
         st.session_state.selected_menu = menu_name
@@ -57,7 +83,6 @@ for menu_name in [st.session_state.config["menu_0"], st.session_state.config["me
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-# 부제목 설정
 if current_menu == st.session_state.config["menu_0"]:
     subtitle = st.session_state.config["sub_home"]
 elif current_menu == st.session_state.config["menu_1"]:
@@ -65,37 +90,36 @@ elif current_menu == st.session_state.config["menu_1"]:
 else:
     subtitle = st.session_state.config["sub_menu2"]
 
-st.markdown(f"""<div style="font-size: 14px; line-height: 1.5; color: #555;">{subtitle}</div>""", unsafe_allow_html=True)
+st.markdown(f"<div style='font-size: 14px; color: #555; text-align: left;'>{subtitle}</div>", unsafe_allow_html=True)
 st.divider()
 
 # --- [4. 메뉴별 상세 기능] ---
 
-# 1) Home 메뉴
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
-    # (기존 링크 버튼 코드 유지)
-    st.write("링크 버튼 구역")
+    # 링크 버튼 (2단 구성 생략 시 가독성을 위해 바로 작성)
+    col1, col2 = st.columns(2)
+    with col1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with col2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
     
     st.divider()
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True)
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="main_editor")
+    
     if st.button("💾 단축키 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
-        st.success("저장되었습니다.")
+        st.success("데이터가 성공적으로 저장되었습니다.")
 
-# 2) 마감작업 메뉴
 elif current_menu == st.session_state.config["menu_1"]:
     with st.expander("💬 카카오톡 전송용 안내문", expanded=True):
         updated_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=250)
         if st.button("💾 안내문 양식 저장"):
             st.session_state.config["prompt_template"] = updated_template
-            st.success("안내문 양식이 저장되었습니다.")
-    
+            st.success("양식이 저장되었습니다.")
     st.divider()
     st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
     st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
 
-# 3) 카드매입 변환 메뉴
 elif current_menu == st.session_state.config["menu_2"]:
     st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
