@@ -11,9 +11,9 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 생성 엔진] ---
+# --- [1. PDF 변환 핵심 엔진] ---
 try:
-    font_path = "malgun.ttf" 
+    font_path = "malgun.ttf"
     if os.path.exists(font_path):
         pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
         FONT_NAME = 'MalgunGothic'
@@ -93,14 +93,15 @@ if 'config' not in st.session_state:
         "menu_2": "📁 매출매입장 PDF 변환",
         "menu_3": "💳 카드매입 수기입력건",
         "sub_menu1": "안내문 자동 작성 및 엑셀 가공 도구입니다.",
-        "sub_menu2": "매출장과 매입장을 분류하여 각각 PDF로 변환합니다.",
-        "sub_menu3": "불필요 열 삭제 및 날짜 간소화 후 카드별로 분리합니다."
+        "sub_menu2": "매출매입장을 각각의 PDF로 일괄 변환하여 ZIP으로 제공합니다.",
+        "sub_menu3": "불필요 열 삭제 및 날짜 간소화 후 카드번호별로 파일을 분리합니다."
     }
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-# --- [3. 사이드바 레이아웃] ---
+# --- [3. 레이아웃] ---
 st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
+
 with st.sidebar:
     st.markdown("### 📁 Menu")
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
@@ -110,74 +111,93 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [4. 메인 화면 로직] ---
+# --- [4. 메인 로직] ---
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 st.divider()
 
-# --- [Menu 2: 매출/매입장 PDF 분류 변환] ---
-if current_menu == st.session_state.config["menu_2"]:
+# --- Menu 0: Home ---
+if current_menu == st.session_state.config["menu_0"]:
+    st.subheader("🔗 바로가기")
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+
+# --- Menu 2: PDF 일괄 변환 (매출/매입 구분 ZIP) ---
+elif current_menu == st.session_state.config["menu_2"]:
     st.info(st.session_state.config["sub_menu2"])
-    f_pdf = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'], key="m2_pdf_up")
-    
+    f_pdf = st.file_uploader("📊 엑셀 파일 업로드 (PDF 변환용)", type=['xlsx'], key="m2_up")
     if f_pdf:
-        all_sheets = pd.read_excel(f_pdf, sheet_name=None)
+        df_all = pd.read_excel(f_pdf)
         biz_name = f_pdf.name.split(" ")[0]
         
-        # 매출/매입 분류 저장용
-        sales_zip = io.BytesIO()
-        purchase_zip = io.BytesIO()
-        
-        has_sales = False
-        has_purchase = False
-        
-        with zipfile.ZipFile(sales_zip, "a", zipfile.ZIP_DEFLATED, False) as sz, \
-             zipfile.ZipFile(purchase_zip, "a", zipfile.ZIP_DEFLATED, False) as pz:
+        # 일자 범위 자동 추출
+        try:
+            tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
+            d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}"
+        except: d_range = "2025년도"
+
+        type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
+        if type_col:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for g in ['매출', '매입']:
+                    target = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                    if not target.empty:
+                        pdf = make_pdf_stream(target, f"{g} 장", biz_name, d_range)
+                        zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             
-            for sheet_name, df in all_sheets.items():
-                if df.empty: continue
-                pdf_data = make_pdf_stream(df, sheet_name, biz_name, "2025년")
-                
-                if "매출" in sheet_name:
-                    sz.writestr(f"{sheet_name}.pdf", pdf_data.getvalue())
-                    has_sales = True
-                elif "매입" in sheet_name:
-                    pz.writestr(f"{sheet_name}.pdf", pdf_data.getvalue())
-                    has_purchase = True
-                else:
-                    # 분류가 모호하면 매출장에 기본 포함
-                    sz.writestr(f"{sheet_name}.pdf", pdf_data.getvalue())
-                    has_sales = True
+            st.success(f"✅ {biz_name} 분석 완료. 매출/매입장이 포함된 ZIP을 생성했습니다.")
+            st.download_button(
+                label="🎁 매출/매입장 PDF 일괄 다운로드 (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"{biz_name}_매출매입장_일괄.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
+        else:
+            st.error("'구분' 또는 '유형' 컬럼을 엑셀에서 찾을 수 없습니다.")
 
-        st.success(f"✅ {biz_name} - 분류 완료")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if has_sales:
-                st.download_button(
-                    label="📥 매출장 PDF 다운로드 (ZIP)",
-                    data=sales_zip.getvalue(),
-                    file_name=f"{biz_name}_매출장_PDF.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
-        with col2:
-            if has_purchase:
-                st.download_button(
-                    label="📥 매입장 PDF 다운로드 (ZIP)",
-                    data=purchase_zip.getvalue(),
-                    file_name=f"{biz_name}_매입장_PDF.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
-
-# --- [Menu 3: 카드 분리 기능 유지] ---
+# --- Menu 3: 카드 분리 (불필요 열 삭제 + 날짜 간소화 + 카드번호별 파일명 정리) ---
 elif current_menu == st.session_state.config["menu_3"]:
     st.info(st.session_state.config["sub_menu3"])
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
-        # (기존 카드 가공 및 분리 로직 수행...)
-        st.write("✅ 카드 분리 가공 준비 완료")
-        # (여기에 이전에 구현한 카드 분리 로직 코드 포함)
-
-# (나머지 Home, 마감작업 메뉴 등은 이전 통합 코드와 동일)
+        # 1. 파일명 정리
+        raw_fn = os.path.splitext(card_up.name)[0]
+        clean_name = re.sub(r'\(.*?\)', '', raw_fn.replace("위하고_수기입력_", "")).strip()
+        
+        # 2. 헤더 찾기
+        temp_df = pd.read_excel(card_up, header=None)
+        target_row = next((i for i, r in temp_df.iterrows() if any(k in " ".join(r.astype(str)) for k in ['카드번호', '매출금액'])), 0)
+        df = pd.read_excel(card_up, header=target_row)
+        
+        # 3. 열 삭제 및 가공
+        df = df.drop(columns=[c for c in df.columns if 'Unnamed' in str(c) or c in ['취소여부', '매출구분']])
+        dt_col = next((c for c in df.columns if '이용일' in str(c)), None)
+        if dt_col: df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce').dt.strftime('%Y-%m-%d')
+        
+        num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
+        amt_col = next((c for c in df.columns if any(k in str(c) for k in ['매출금액', '금액', '합계'])), None)
+        co_col = next((c for c in df.columns if any(k in str(c) for k in ['카드사', '기관', '카드명'])), None)
+        
+        if num_col and amt_col:
+            z_buf = io.BytesIO()
+            with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for c_num, group in df.groupby(num_col):
+                    if pd.isna(c_num): continue
+                    up_df = group.copy()
+                    up_df[amt_col] = pd.to_numeric(up_df[amt_col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                    up_df['공급가액'] = (up_df[amt_col] / 1.1).round(0).astype(int)
+                    up_df['부가세'] = up_df[amt_col] - up_df['공급가액']
+                    
+                    c_co = str(group[co_col].iloc[0]) if co_col else "카드"
+                    safe_num = str(c_num).replace('*', '').strip()
+                    
+                    # 엑셀 파일 생성
+                    excel_buf = io.BytesIO()
+                    with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+                        up_df.to_excel(writer, index=False)
+                    zf.writestr(f"{clean_name}_{c_co}_{safe_num}_(업로드용).xlsx", excel_buf.getvalue())
+            
+            st.download_button("📥 카드별 분리 파일 일괄 다운로드 (ZIP)", data=z_buf.getvalue(), file_name=f"{clean_name}_카드분리완료.zip", use_container_width=True)
