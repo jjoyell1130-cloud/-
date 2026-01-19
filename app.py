@@ -26,7 +26,6 @@ if 'link_data' not in st.session_state:
         {"name": "💳 카드자료 보관함", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
     ]
 
-# [데이터 입력] 요청하신 모든 계정과목 데이터 포함
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"구분": "차량/교통", "주요 거래처": "유류대, 주차장, 하이패스", "분류": "공제유무확인", "계정명": "차량유지비", "코드": "822"},
@@ -38,18 +37,31 @@ if 'account_data' not in st.session_state:
         {"구분": "공과금", "주요 거래처": "전기요금", "분류": "매입", "계정명": "전력비", "코드": ""},
         {"구분": "공과금", "주요 거래처": "수도요금", "분류": "일반", "계정명": "수도광열비", "코드": ""},
         {"구분": "공과금", "주요 거래처": "통신비(핸드폰, 인터넷)", "분류": "매입", "계정명": "통신비", "코드": "814"},
-        {"구분": "수리", "주요 거래처": "컴퓨터 A/S, 비품 수리", "분류": "매입", "계정명": "수선비", "코드": "820"},
-        {"구분": "기타", "주요 거래처": "금융결제원", "분류": "일반", "계정명": "세금공과금", "코드": ""},
-        {"구분": "기타", "주요 거래처": "로카모빌리티", "분류": "일반", "계정명": "소모품비", "코드": "830"},
+        {"구분": "수리", "주요 거래처": "컴퓨터 A/S, 비품 수리", "분류": "매입", "계정명": "수선비", "코드": "820"}
     ]
 
 if 'memo_content' not in st.session_state:
     st.session_state.memo_content = ""
 
+# --- 유틸리티 함수 ---
+def to_int(val):
+    try:
+        if pd.isna(val) or str(val).strip() == "": return 0
+        return int(float(re.sub(r'[^0-9.-]', '', str(val))))
+    except: return 0
+
+def format_date(val):
+    try:
+        if isinstance(val, (int, float)):
+            return pd.to_datetime(val, unit='D', origin='1899-12-30').strftime('%Y-%m-%d')
+        dt = pd.to_datetime(str(val), errors='coerce')
+        return dt.strftime('%Y-%m-%d') if not pd.isna(dt) else str(val)
+    except: return str(val)
+
 # --- 기본 설정 ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-# --- 사이드바 메뉴 ---
+# --- 사이드바 ---
 st.sidebar.title(st.session_state.config["sidebar_title"])
 menu_options = ["🏠 홈 (대시보드)", st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
 selected_menu = st.sidebar.radio(st.session_state.config["sidebar_label"], menu_options)
@@ -58,54 +70,93 @@ selected_menu = st.sidebar.radio(st.session_state.config["sidebar_label"], menu_
 if selected_menu == "🏠 홈 (대시보드)":
     st.title(st.session_state.config["main_title"])
     
-    # 바로가기 버튼 섹션
+    # 바로가기 버튼
     st.subheader("🔗 바로가기")
     cols = st.columns(3)
     for i, item in enumerate(st.session_state.link_data):
         cols[i % 3].link_button(item["name"], item["url"], use_container_width=True)
     
     st.divider()
-
-    # --- [계정과목 단축키 관리창] ---
+    
+    # 단축키 관리 테이블
     st.subheader("⌨️ 차변 계정 단축키 관리")
-    st.info("💡 '분류' 열을 클릭하여 매입/일반/공제유무확인을 선택할 수 있습니다.")
-    
     df_accounts = pd.DataFrame(st.session_state.account_data)
-    
-    # 데이터 에디터 설정
     edited_df = st.data_editor(
         df_accounts,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "분류": st.column_config.SelectboxColumn(
-                "분류",
-                options=["매입", "일반", "공제유무확인"],
-                required=True
-            ),
-            "코드": st.column_config.TextColumn("코드", width="small"),
-            "구분": st.column_config.TextColumn("구분", width="medium"),
-            "주요 거래처": st.column_config.TextColumn("주요 거래처", width="large")
+            "분류": st.column_config.SelectboxColumn("분류", options=["매입", "일반", "공제유무확인"], required=True)
         },
-        key="main_account_editor"
+        key="main_editor"
     )
-    
-    if st.button("💾 계정 리스트 변경사항 저장"):
+    if st.button("💾 계정 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
-        st.success("단축키 리스트가 안전하게 저장되었습니다!")
+        st.success("저장 완료!")
 
     st.divider()
     st.subheader("📝 업무 메모")
-    st.session_state.memo_content = st.text_area("내용을 입력하세요", value=st.session_state.memo_content, height=150)
+    st.session_state.memo_content = st.text_area("내용 입력", value=st.session_state.memo_content, height=150)
 
-# --- [2. 업무 메뉴 1 & 2] ---
-# (이하 기존의 PDF 분석 및 엑셀 변환 로직을 그대로 유지하시면 됩니다.)
+# --- [2. 매출매입장 PDF 분석] ---
 elif selected_menu == st.session_state.config["menu_1"]:
     st.title(st.session_state.config["menu_1"])
-    st.info("매출매입장 분석 기능을 실행합니다.")
-    # ... 기존 코드 ...
+    tax_pdfs = st.file_uploader("1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
+    excel_ledgers = st.file_uploader("2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
+    
+    final_reports = {}
+    if tax_pdfs:
+        for f in tax_pdfs:
+            with pdfplumber.open(f) as pdf:
+                text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
+                name_match = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", text)
+                biz_name = name_match.group(1).strip() if name_match else f.name.split('_')[0]
+                if biz_name not in final_reports: final_reports[biz_name] = {"vat": 0}
+                vat_match = re.search(r"(?:납부할\s*세액|차가감납부할세액|환급받을\s*세액)\s*([0-9,.-]+)", text)
+                if vat_match:
+                    val = to_int(vat_match.group(1))
+                    final_reports[biz_name]["vat"] = -val if "환급" in text else val
 
+    if final_reports:
+        for name, info in final_reports.items():
+            with st.expander(f"📌 {name} 결과"):
+                st.write(f"납부/환급액: {info.get('vat', 0):,}원")
+
+# --- [3. 카드별 엑셀 변환] ---
 elif selected_menu == st.session_state.config["menu_2"]:
     st.title(st.session_state.config["menu_2"])
-    st.info("카드자료 변환 기능을 실행합니다.")
-    # ... 기존 코드 ...
+    uploaded_files = st.file_uploader("카드사 엑셀 업로드", type=['xlsx', 'xls', 'xlsm'], accept_multiple_files=True)
+    
+    if uploaded_files:
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            for file in uploaded_files:
+                df_raw = pd.read_excel(file, header=None)
+                h_idx = 0
+                for i in range(min(40, len(df_raw))):
+                    row_s = "".join([str(v) for v in df_raw.iloc[i].values])
+                    if any(k in row_s for k in ['카드번호', '이용일', '매출일']):
+                        h_idx = i; break
+                
+                file.seek(0)
+                df = pd.read_excel(file, header=h_idx)
+                df.columns = [str(c).strip() for c in df.columns]
+                
+                col_map = {'매출일자': ['이용일', '승인일', '매출일'], '가맹점명': ['가맹점', '이용처'], 
+                           '사업자번호': ['사업자', '등록번호'], '매출금액': ['금액', '합계', '이용금액']}
+                
+                tmp = pd.DataFrame()
+                for std, aliases in col_map.items():
+                    act = next((c for c in df.columns if any(a in str(c) for a in aliases)), None)
+                    tmp[std] = df[act] if act else ""
+                
+                tmp['매출일자'] = tmp['매출일자'].apply(format_date)
+                tmp['매출금액'] = tmp['매출금액'].apply(to_int)
+                tmp = tmp[tmp['매출금액'] > 0].copy()
+                
+                # 가공 데이터 저장
+                buf = io.BytesIO()
+                tmp.to_excel(buf, index=False)
+                zf.writestr(f"변환_{file.name}", buf.getvalue())
+        
+        st.download_button("📥 변환 완료 파일 다운로드", zip_buffer.getvalue(), "카드데이터변환.zip")
