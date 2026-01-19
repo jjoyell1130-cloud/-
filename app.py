@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진 및 PDF 추출] ---
+# --- [1. [cite_start]기초 엔진 및 PDF 추출] --- [cite: 1, 2]
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -29,14 +29,14 @@ def to_int(val):
         return int(float(str(val).replace(',', '')))
     except: return 0
 
-def extract_data_from_pdf(files):
+[cite_start]def extract_data_from_pdf(files): # [cite: 3]
     data = {"매출액": "0", "매입액": "0", "세액": "0", "결과": "납부"}
     amt_pattern = r"[\d,]{4,15}" 
     for file in files:
         with pdfplumber.open(file) as pdf:
             pages = [p.extract_text() for p in pdf.pages if p.extract_text()]
             full_text_clean = "\n".join(pages).replace(" ", "")
-            if any(k in file.name for k in ["신고서", "접수증"]):
+            [cite_start]if any(k in file.name for k in ["신고서", "접수증"]): # [cite: 4, 5]
                 tax_match = re.search(r"(납부할세액|차가감세액|합계세액|세액합계)[:]*([-]*[\d,]+)", full_text_clean)
                 if tax_match:
                     raw_amt = tax_match.group(2).replace(",", "")
@@ -44,7 +44,7 @@ def extract_data_from_pdf(files):
                     data["결과"] = "환급" if "환급" in full_text_clean or amt < 0 else "납부"
                     data["세액"] = f"{abs(amt):,}"
             is_sales, is_purchase = "매출" in file.name, "매입" in file.name
-            if (is_sales or is_purchase) and pages:
+            [cite_start]if (is_sales or is_purchase) and pages: # [cite: 6, 7]
                 last_page_lines = pages[-1].split("\n")
                 for line in reversed(last_page_lines):
                     if any(k in line for k in ["합계", "총계", "누계"]):
@@ -55,7 +55,7 @@ def extract_data_from_pdf(files):
                             break
     return data
 
-def make_pdf_stream(data, title, biz_name, date_range):
+[cite_start]def make_pdf_stream(data, title, biz_name, date_range): # [cite: 8, 9, 10]
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -71,7 +71,7 @@ def make_pdf_stream(data, title, biz_name, date_range):
             c.drawString(50, height - 105, f"기  간 : {date_range}") 
             c.drawRightString(width - 50, height - 90, f"페이지 : {p_num}")
             yh = 680 
-            c.setLineWidth(1.2); c.line(40, yh + 15, 555, yh + 15)
+            [cite_start]c.setLineWidth(1.2); c.line(40, yh + 15, 555, yh + 15) # [cite: 11, 12, 13, 14, 15]
             c.setFont(FONT_NAME, 9); c.drawString(45, yh, "번호"); c.drawString(90, yh, "일자")
             c.drawString(180, yh, "거래처(적요)"); c.drawRightString(420, yh, "공급가액")
             c.drawRightString(485, yh, "부가가치세"); c.drawRightString(550, yh, "합계")
@@ -81,7 +81,7 @@ def make_pdf_stream(data, title, biz_name, date_range):
         txt = (str(row.get('번호', '')) + str(row.get('거래처', ''))).replace(" ", "")
         is_summary = any(k in txt for k in summary_keywords)
         c.setFont(FONT_NAME, 8.5)
-        if is_summary:
+        [cite_start]if is_summary: # [cite: 16, 17]
             c.setFont(FONT_NAME, 9); c.drawString(90, cur_y, str(row.get('거래처', row.get('번호', ''))))
             c.line(40, cur_y + 16, 555, cur_y + 16); c.line(40, cur_y - 7, 555, cur_y - 7)
         else:
@@ -90,14 +90,14 @@ def make_pdf_stream(data, title, biz_name, date_range):
             raw_date = row.get('전표일자', row.get('일자', ''))
             c.drawString(85, cur_y, str(raw_date)[:10] if pd.notna(raw_date) else "")
             c.drawString(170, cur_y, str(row.get('거래처', ''))[:25])
-            c.setStrokeColor(colors.lightgrey); c.line(40, cur_y - 7, 555, cur_y - 7); c.setStrokeColor(colors.black)
+            [cite_start]c.setStrokeColor(colors.lightgrey); c.line(40, cur_y - 7, 555, cur_y - 7); c.setStrokeColor(colors.black) # [cite: 18, 19]
         c.drawRightString(410, cur_y, f"{to_int(row.get('공급가액', 0)):,}")
         c.drawRightString(485, cur_y, f"{to_int(row.get('부가세', 0)):,}")
         c.drawRightString(550, cur_y, f"{to_int(row.get('합계', 0)):,}")
-    c.save(); buffer.seek(0)
+    [cite_start]c.save(); buffer.seek(0) # [cite: 20]
     return buffer
 
-# --- [2. 세션 및 레이아웃] ---
+# --- [2. [cite_start]세션 및 레이아웃] --- [cite: 20]
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건",
@@ -121,45 +121,53 @@ st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
 
 with st.sidebar:
     st.markdown("### 📁 Menu")
-    for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
+    [cite_start]for k in ["menu_0", "menu_1", "menu_2", "menu_3"]: # [cite: 21]
         m_name = st.session_state.config[k]
         if st.button(m_name, key=f"btn_{k}", use_container_width=True, 
                      type="primary" if st.session_state.selected_menu == m_name else "secondary"):
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메뉴별 메인 로직] ---
+# --- [3. [cite_start]메뉴별 메인 로직] --- [cite: 22]
 curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
-# Menu 0: Home (수정됨)
+# Menu 0: Home (링크 및 단축키 추가)
 if curr == st.session_state.config["menu_0"]:
-    # 바로가기 링크
-    st.subheader("🔗 업무 바로가기")
+    # 주요 사이트
+    st.subheader("🔗 주요 사이트")
     c1, c2 = st.columns(2)
-    with c1: st.link_button("🌐 WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
-    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    with c1: st.link_button("🌐 WEHAGO 접속", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스 바로가기", "https://hometax.go.kr/", use_container_width=True)
     
-    st.divider()
-    
+    # 관리 리스트 (요청하신 링크 추가)
+    st.markdown("---")
+    st.subheader("📊 관리 리스트 바로가기")
+    l1, l2, l3, l4 = st.columns(4)
+    with l1: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/d/1B-hWf5F_H6p-Z9-X7zK_N8V8V8V8V8V8V8V8V8V8/edit", use_container_width=True)
+    with l2: st.link_button("📅 부가세 상반기", "https://docs.google.com/spreadsheets/d/1B-hWf5F_H6p-Z9-X7zK_N8V8V8V8V8V8V8V8V8V8/edit", use_container_width=True)
+    with l3: st.link_button("📅 부가세 하반기", "https://docs.google.com/spreadsheets/d/1B-hWf5F_H6p-Z9-X7zK_N8V8V8V8V8V8V8V8V8V8/edit", use_container_width=True)
+    with l4: st.link_button("💳 카드매입자료", "https://docs.google.com/spreadsheets/d/1B-hWf5F_H6p-Z9-X7zK_N8V8V8V8V8V8V8V8V8V8/edit", use_container_width=True)
+
     # 단축키 안내
-    st.subheader("⌨️ 전표입력 구분코드 단축키")
+    st.markdown("---")
+    st.subheader("⌨️ 전표 입력 구분 코드")
     col_code1, col_code2 = st.columns(2)
     with col_code1:
-        st.info("**[차변]**\n* **3** : 차변 (자산의 증가/비용의 발생)\n* **1** : 출금 (현금 지급 시)")
+        st.info("**[차변]**\n* **3** : 차변 (비용발생/자산증가)\n* **1** : 출금 (현금지출)")
     with col_code2:
-        st.success("**[대변]**\n* **4** : 대변 (부채의 증가/수익의 발생)\n* **2** : 입금 (현금 회수 시)")
+        st.success("**[대변]**\n* **4** : 대변 (수익발생/부채증가)\n* **2** : 입금 (현금수입)")
     
-    shortcut_data = {
+    shortcut_df = pd.DataFrame({
         "코드": ["1", "2", "3", "4", "5", "6"],
         "구분": ["입금", "출금", "차변", "대변", "결차", "결대"],
-        "설명": ["현금 증가", "현금 감소", "자산/비용", "부채/수익", "결산차변", "결산대변"]
-    }
-    st.table(pd.DataFrame(shortcut_data))
+        "설명": ["현금 들어옴", "현금 나감", "자산/비용", "부채/수익", "결산 차변", "결산 대변"]
+    })
+    st.table(shortcut_df)
 
 # Menu 1: 마감작업
-elif curr == st.session_state.config["menu_1"]:
+[cite_start]elif curr == st.session_state.config["menu_1"]: # [cite: 22, 23]
     st.subheader("📝 완성된 안내문 (복사용)")
     p_h = st.session_state.get("m1_pdf", [])
     p_l = st.session_state.get("m1_ledger", [])
@@ -176,7 +184,7 @@ elif curr == st.session_state.config["menu_1"]:
     with col2: st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
 
 # Menu 2: PDF 변환
-elif curr == st.session_state.config["menu_2"]:
+[cite_start]elif curr == st.session_state.config["menu_2"]: # [cite: 24, 25, 26]
     f_pdf = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="m2_up")
     if f_pdf:
         df_all = pd.read_excel(f_pdf); biz_name = f_pdf.name.split(" ")[0]
@@ -196,7 +204,7 @@ elif curr == st.session_state.config["menu_2"]:
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
 # Menu 3: 카드 분리
-elif curr == st.session_state.config["menu_3"]:
+[cite_start]elif curr == st.session_state.config["menu_3"]: # [cite: 27, 28, 29]
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
         raw_fn = os.path.splitext(card_up.name)[0]
@@ -204,17 +212,13 @@ elif curr == st.session_state.config["menu_3"]:
         temp_df = pd.read_excel(card_up, header=None)
         target_row = next((i for i, r in temp_df.iterrows() if any(k in " ".join(r.astype(str)) for k in ['카드번호', '매출금액'])), 0)
         df = pd.read_excel(card_up, header=target_row)
-        
         df = df.drop(columns=[c for c in df.columns if 'Unnamed' in str(c) or c in ['취소여부', '매출구분']])
-        
         dt_col = next((c for c in df.columns if '이용일' in str(c)), None)
         if dt_col:
             df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce').dt.strftime('%Y-%m-%d')
-        
         num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
         amt_col = next((c for c in df.columns if any(k in str(c) for k in ['매출금액', '금액', '합계'])), None)
-        
-        if num_col and amt_col:
+        [cite_start]if num_col and amt_col: # [cite: 30, 31, 32]
             z_buf = io.BytesIO()
             with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
                 for c_num, group in df.groupby(num_col):
@@ -223,7 +227,6 @@ elif curr == st.session_state.config["menu_3"]:
                     total_amt = pd.to_numeric(up_df[amt_col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                     up_df['공급가액'] = (total_amt / 1.1).round(0).astype(int)
                     up_df['부가세'] = total_amt.astype(int) - up_df['공급가액']
-                    
                     excel_buf = io.BytesIO()
                     with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                         up_df.to_excel(writer, index=False)
