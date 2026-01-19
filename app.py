@@ -2,11 +2,10 @@ import streamlit as st
 import pdfplumber
 import re
 
-# 페이지 설정
+# 1. 페이지 설정 및 사이드바 문구
 st.set_page_config(page_title="세무비서 자동화", layout="wide")
 st.title("📊 부가세 신고 안내문 생성기")
 
-# 1. 사이드바 설정 (인사말/마무리말)
 st.sidebar.header("📝 문구 설정")
 greeting_input = st.sidebar.text_area("인사말 ( {biz_name} 은 자동으로 바뀝니다 )", 
     value="*2025 {biz_name}-상반기 부가세 신고현황☆★환급\n더위 조심하시고 건강이 최고인거 아시죠? ^.<")
@@ -19,13 +18,12 @@ def extract_amount(text, keyword):
     lines = text.split('\n')
     for line in lines:
         if keyword in line:
-            # 1,000 단위 이상의 콤마가 포함된 숫자 패턴 찾기
             amounts = re.findall(r'\d{1,3}(?:,\d{3})+', line)
             if amounts:
                 return amounts[-1]
     return "0"
 
-# 2. 파일 업로드
+# 2. 파일 업로드 섹션
 uploaded_files = st.file_uploader("위하고 PDF 파일들을 올려주세요", accept_multiple_files=True, type=['pdf'])
 
 if uploaded_files:
@@ -37,12 +35,11 @@ if uploaded_files:
 
     for file in uploaded_files:
         with pdfplumber.open(file) as pdf:
-            # 텍스트 추출
             text = "".join([page.extract_text() for page in pdf.pages if page.extract_text()])
             
-            # 파일 이름에 따른 금액 추출
-            if "매출장" in file.name:
+            # 파일 이름에 따른 금액 추출 (안전한 조건문 구조)
+            fname = file.name
+            if "매출장" in fname:
                 report_data["매출"] = extract_amount(text, "누계")
-            elif "매입장" in file.name:
-                report_data["매입"] = extract_amount(text, "누계매입")
-            elif
+            elif "매입장" in fname:
+                report_data["
