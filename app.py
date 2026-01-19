@@ -32,14 +32,15 @@ if 'config' not in st.session_state:
 25일 까지는 수정이 가능합니다!"""
     }
 
-# [복구] 제공해주신 링크 5개 반영
+# [복구] 요청하신 순서대로 링크 6개 재정렬
 if 'link_data' not in st.session_state:
     st.session_state.link_data = [
+        {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
+        {"name": "🏠 홈택스", "url": "https://hometax.go.kr/"},
         {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
         {"name": "📁 상반기 자료", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
         {"name": "📁 하반기 자료", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
-        {"name": "💳 카드자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"},
-        {"name": "🏠 홈택스", "url": "https://hometax.go.kr/"} 
+        {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
     ]
 
 # [복구] 차변 계정 단축키 전체 리스트
@@ -86,7 +87,8 @@ st.divider()
 
 if selected_menu == "🏠 홈 (대시보드)":
     st.subheader("🔗 바로가기")
-    link_cols = st.columns(5)
+    # 6개 링크이므로 3개씩 2줄 혹은 한 줄에 6개 배치 (여기서는 한 줄에 배치)
+    link_cols = st.columns(len(st.session_state.link_data))
     for i, item in enumerate(st.session_state.link_data):
         link_cols[i].link_button(item["name"], item["url"], use_container_width=True)
     
@@ -101,9 +103,10 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.divider()
     
     st.subheader("📝 업무 메모")
-    st.session_state.memo_content = st.text_area("메모를 입력하세요", value=st.session_state.memo_content, height=200)
+    st.session_state.memo_content = st.text_area("내용을 입력하세요", value=st.session_state.memo_content, height=200)
 
 elif selected_menu == st.session_state.config["menu_1"]:
+    # 상단 고정 안내문 양식
     with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=True):
         st.session_state.config["prompt_template"] = st.text_area("양식 수정", st.session_state.config["prompt_template"], height=250)
         st.caption("변수: {업체명}, {매출액}, {매입액}, {결과}, {세액}")
