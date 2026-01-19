@@ -90,23 +90,22 @@ with st.sidebar.expander("⚙️ 명칭 및 부제목 수정"):
     if st.button("💾 설정 저장"):
         st.rerun()
 
-# --- [5. 메인 화면 출력: 폰트 정렬 수정] ---
+# --- [5. 메인 화면 출력: 정렬 문제 완벽 해결] ---
 
 st.title(selected_menu)
 
-# [수정 핵심] 강제 왼쪽 정렬 + 14px 폰트 + 좁은 행간 적용
+# [핵심] 모든 정렬 방해 요소를 제거한 CSS 적용
 st.markdown(
     f"""
     <div style="
         font-size: 14px; 
-        line-height: 1.3; 
+        line-height: 1.5; 
         color: #555; 
-        text-align: left; 
-        display: block; 
+        text-align: left !important; 
         width: 100%; 
-        white-space: pre-wrap;
-        margin-top: -10px;
-        margin-bottom: 20px;
+        padding: 0px !important;
+        margin: 0px !important;
+        white-space: pre-line;
     ">
         {current_subtitle}
     </div>
@@ -115,7 +114,7 @@ st.markdown(
 )
 st.divider()
 
-# --- [6. 기능 구현] ---
+# --- [6. 기능 구현 (뻑나는 문제 방지용 로직 포함)] ---
 
 if selected_menu == "🏠 홈 (대시보드)":
     st.subheader("🔗 바로가기")
@@ -140,7 +139,7 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.session_state.memo_content = st.text_area("공통 메모", value=st.session_state.memo_content, height=150)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # PDF 분석 로직 (복구 완료)
+    # PDF 분석 로직
     col1, col2 = st.columns(2)
     with col1:
         tax_pdfs = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
@@ -168,7 +167,7 @@ elif selected_menu == st.session_state.config["menu_1"]:
                     st.metric("예상 세액", f"{info.get('vat', 0):,} 원")
 
 elif selected_menu == st.session_state.config["menu_2"]:
-    # 카드 엑셀 변환 로직 (복구 완료)
+    # 카드 엑셀 변환 로직
     uploaded_files = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx', 'xls', 'xlsm'], accept_multiple_files=True)
     
     if uploaded_files:
