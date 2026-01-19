@@ -10,7 +10,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 변환 헬퍼 로직] ---
+# --- [1. PDF 변환 로직] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -96,7 +96,7 @@ def get_processed_excel(file):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-# --- [2. 세션 상태 초기화 (NameError 해결 핵심)] ---
+# --- [2. 세션 상태 초기화] ---
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", 
@@ -104,8 +104,8 @@ if 'config' not in st.session_state:
         "menu_2": "📁 매출매입장 PDF 변환",
         "menu_3": "💳 카드매입 수기입력건",
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
-        "sub_menu2": "매출매입장 엑셀을 한 번의 클릭으로 깔끔한 PDF 압축파일로 변환합니다.",
-        "sub_menu3": "카드사별 엑셀 파일을 업로드하시면 위하고 양식으로 즉시 변환 및 카드별 자동 분리가 수행됩니다.",
+        "sub_menu2": "매출매입장 엑셀을 깔끔한 PDF 압축파일로 변환합니다.",
+        "sub_menu3": "카드사별 엑셀을 업로드하면 위하고 양식 변환 및 카드별 자동 분리가 수행됩니다.",
         "prompt_template": "*(업체명) 부가세 신고현황..."
     }
 
@@ -113,22 +113,14 @@ if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
 if 'account_data' not in st.session_state:
-    st.session_state.account_data = [
-        {"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"},
-        {"단축키": "830", "거래처": "다이소", "계정명": "소모품비", "분류": "매입"}
-    ]
+    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제확인"}]
 
 if 'link_group_2' not in st.session_state:
-    st.session_state.link_group_2 = [
-        {"name": "📊 신고리스트", "url": "#"}, {"name": "📁 상반기 자료", "url": "#"},
-        {"name": "📁 하반기 자료", "url": "#"}, {"name": "💳 카드매입자료", "url": "#"}
-    ]
+    st.session_state.link_group_2 = [{"name": "📊 신고리스트", "url": "#"}, {"name": "💳 카드매입자료", "url": "#"}]
 
 # --- [3. 화면 레이아웃] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
-st.markdown("""<style> .main .block-container { padding-top: 1.5rem; } </style>""", unsafe_allow_html=True)
 
-# 사이드바 메뉴
 with st.sidebar:
     st.markdown("### 📁 Menu")
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
@@ -138,59 +130,45 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [4. 메인 로직 시작] ---
+# --- [4. 메인 화면 구성] ---
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
+st.divider()
 
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c1, c2 = st.columns(2)
     with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
     with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
-    st.divider()
-    st.subheader("⌨️ 차변계정 단축키")
-    df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True)
-    if st.button("💾 리스트 저장"):
-        st.session_state.account_data = edited_df.to_dict('records')
-        st.success("저장되었습니다.")
-
-elif current_menu == st.session_state.config["menu_1"]:
-    st.info(st.session_state.config["sub_menu1"])
-    excel_up = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'])
-    if excel_up:
-        st.download_button("📥 가공 다운로드", data=get_processed_excel(excel_up), file_name=f"가공_{excel_up.name}")
-
-elif current_menu == st.session_state.config["menu_2"]:
-    st.info(st.session_state.config["sub_menu2"])
-    f = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="menu2_up")
-    if f:
-        # (기본 PDF 변환 로직 동일...)
-        st.write("PDF 변환 준비 완료")
 
 elif current_menu == st.session_state.config["menu_3"]:
     st.info(st.session_state.config["sub_menu3"])
-    card_up = st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], key="menu3_card_up")
+    card_up = st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], key="menu3_up")
     
     if card_up:
         df = pd.read_excel(card_up)
         base_filename = os.path.splitext(card_up.name)[0]
         
-        # 컬럼 자동 찾기
-        card_co_col = next((c for c in ['카드사', '카드기관', '카드명', '발급사'] if c in df.columns), None)
-        card_num_col = next((c for c in ['카드번호', '카드번호별', '계좌번호'] if c in df.columns), None)
-        amt_col = next((c for c in ['이용금액', '합계금액', '금액', '승인금액'] if c in df.columns), None)
+        # 🔍 컬럼 찾기 로직 강화 (카드번호별, 카드사 등 모든 경우의 수 포함)
+        card_co_col = next((c for c in df.columns if any(kw in c for kw in ['카드사', '카드기관', '카드명', '발급사', '기관명'])), None)
+        card_num_col = next((c for c in df.columns if any(kw in c for kw in ['카드번호', '번호', '계좌번호', '카드번호별'])), None)
+        amt_col = next((c for c in df.columns if any(kw in c for kw in ['이용금액', '합계금액', '금액', '승인금액', '합계'])), None)
         
         if card_co_col and card_num_col:
             zip_buffer = io.BytesIO()
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                # 카드사, 카드번호 기준으로 그룹화
                 grouped = df.groupby([card_co_col, card_num_col])
+                
                 for (card_co, card_num), group in grouped:
                     upload_df = group.copy()
+                    
+                    # 위하고 양식: 공급가액/부가세 계산
                     if amt_col:
                         upload_df['공급가액'] = (upload_df[amt_col] / 1.1).round(0).astype(int)
                         upload_df['부가세'] = upload_df[amt_col] - upload_df['공급가액']
                     
+                    # 파일명: 원본제목_카드사_카드번호_(업로드용).xlsx
                     safe_num = str(card_num).replace('*', '').strip()
                     new_file_name = f"{base_filename}_{card_co}_{safe_num}_(업로드용).xlsx"
                     
@@ -199,13 +177,14 @@ elif current_menu == st.session_state.config["menu_3"]:
                         upload_df.to_excel(writer, index=False)
                     zf.writestr(new_file_name, excel_buffer.getvalue())
             
-            st.success(f"✅ 총 {len(grouped)}개의 카드 파일이 생성되었습니다.")
+            st.success(f"✅ {len(grouped)}개의 카드 파일이 생성되었습니다.")
             st.download_button(
-                label=f"📥 {base_filename} 카드별 분리 다운로드 (ZIP)",
+                label="📥 카드별 분리 파일 일괄 다운로드 (ZIP)",
                 data=zip_buffer.getvalue(),
-                file_name=f"{base_filename}_카드별분리.zip",
+                file_name=f"{base_filename}_분리완료.zip",
                 mime="application/zip",
                 use_container_width=True
             )
         else:
-            st.error("'카드사' 및 '카드번호' 컬럼이 보이지 않습니다. 엑셀 헤더를 확인해주세요.")
+            st.error(f"컬럼 매칭 실패. 현재 엑셀 컬럼: {list(df.columns)}")
+            st.warning("'카드사' 혹은 '카드번호'라는 글자가 포함된 컬럼이 필요합니다.")
