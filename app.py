@@ -135,48 +135,53 @@ st.divider()
 
 # Menu 0: Home
 if curr == st.session_state.config["menu_0"]:
-    # 통합 바로가기
+    # 통합 바로가기 섹션
     st.subheader("🔗 바로가기")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1: st.link_button("🌐 WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
-    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
-    with c3: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c4: st.link_button("📅 부가세 상반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c5: st.link_button("📅 부가세 하반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c6: st.link_button("💳 카드매입자료", "https://docs.google.com/spreadsheets/", use_container_width=True)
+    
+    # 첫 번째 줄: 위하고, 홈택스 (화면에 꽉 차게)
+    c_top1, c_top2 = st.columns(2)
+    with c_top1: st.link_button("🌐 WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
+    with c_top2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    
+    # 두 번째 줄: 나머지 관리 리스트 (화면에 꽉 차게)
+    c_bot1, c_bot2, c_bot3, c_bot4 = st.columns(4)
+    with c_bot1: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/", use_container_width=True)
+    with c_bot2: st.link_button("📅 부가세 상반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
+    with c_bot3: st.link_button("📅 부가세 하반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
+    with c_bot4: st.link_button("💳 카드매입자료", "https://docs.google.com/spreadsheets/", use_container_width=True)
 
     st.divider()
 
-    # 전표 입력 가이드
+    # 전표 입력 가이드 섹션
     st.subheader("⌨️ 전표 입력 가이드")
     
-    # 상세 계정과목 분류 표 (순번 삭제, 계정/코드 분리)
+    # 상세 계정과목 분류 표 (비고 삭제, 계정/코드 분리, 순번 삭제)
     acc_data = [
-        ["유류대", "매입/불공제", "차량유지비", "822", "공제유무확인필요"],
-        ["편의점", "매입/불공제", "여비교통비", "812", "공제유무확인필요"],
-        ["다이소", "매입", "소모품비", "830", ""],
-        ["식당", "매입/불공제", "복리후생비", "811", "공제유무확인필요"],
-        ["거래처(물건)", "매입", "상품", "146", ""],
-        ["홈쇼핑/인터넷구매", "매입", "소모품비", "830", ""],
-        ["주차장/소액세금", "일반", "차량유지비", "822", ""],
-        ["휴게소", "공제확인", "차량/여비교통", "", ""],
-        ["전기요금", "매입", "전력비", "", ""],
-        ["수도요금", "일반", "수도광열비", "", ""],
-        ["통신비", "매입", "통신비", "814", ""],
-        ["금융결제원", "일반", "세금과공과", "", ""],
-        ["약국", "일반", "소모품비", "830", ""],
-        ["모텔", "일반", "여비교통비/출장비", "", ""],
-        ["보안(캡스)/홈페이지", "매입", "지급수수료", "831", ""],
-        ["아울렛(작업복)", "매입", "소모품비", "", ""],
-        ["컴퓨터 A/S", "매입", "수선비", "820", ""],
-        ["결제대행업체(PG)", "일반", "소모품비", "830", ""],
-        ["신용카드알림", "일반", "지급수수료", "", ""],
-        ["휴대폰소액결제", "일반", "소모품비", "", ""],
-        ["병원", "일반", "복리후생비", "", ""],
-        ["로카모빌리티", "일반", "소모품비", "", ""],
-        ["소프트웨어 개발", "매입", "지급수수료", "831", ""]
+        ["유류대", "매입/불공제", "차량유지비", "822"],
+        ["편의점", "매입/불공제", "여비교통비", "812"],
+        ["다이소", "매입", "소모품비", "830"],
+        ["식당", "매입/불공제", "복리후생비", "811"],
+        ["거래처(물건)", "매입", "상품", "146"],
+        ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"],
+        ["주차장/소액세금", "일반", "차량유지비", "822"],
+        ["휴게소", "공제확인", "차량/여비교통", ""],
+        ["전기요금", "매입", "전력비", ""],
+        ["수도요금", "일반", "수도광열비", ""],
+        ["통신비", "매입", "통신비", "814"],
+        ["금융결제원", "일반", "세금과공과", ""],
+        ["약국", "일반", "소모품비", "830"],
+        ["모텔", "일반", "여비교통비/출장비", ""],
+        ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"],
+        ["아울렛(작업복)", "매입", "소모품비", ""],
+        ["컴퓨터 A/S", "매입", "수선비", "820"],
+        ["결제대행업체(PG)", "일반", "소모품비", "830"],
+        ["신용카드알림", "일반", "지급수수료", ""],
+        ["휴대폰소액결제", "일반", "소모품비", ""],
+        ["병원", "일반", "복리후생비", ""],
+        ["로카모빌리티", "일반", "소모품비", ""],
+        ["소프트웨어 개발", "매입", "지급수수료", "831"]
     ]
-    df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드", "비고"])
+    df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
 # Menu 1: 마감작업
