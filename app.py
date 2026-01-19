@@ -26,6 +26,10 @@ if 'config' not in st.session_state:
 25일 까지는 수정이 가능합니다!"""
     }
 
+# 메모 데이터 유지
+if 'daily_memo' not in st.session_state:
+    st.session_state.daily_memo = ""
+
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
@@ -46,39 +50,22 @@ st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
     <style>
-    /* 전체 왼쪽 정렬 고정 */
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; margin-right: auto !important; text-align: left !important; }
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* 사이드바 메뉴 버튼 커스텀 (슬림 회색 디자인) */
+    /* 사이드바 회색톤 디자인 */
     div.stButton > button {
-        width: 100%;
-        border-radius: 6px;
-        height: 2.2rem;
-        font-size: 14px;
-        text-align: left !important;
-        padding-left: 15px !important;
-        margin-bottom: -10px;
-        border: 1px solid #ddd;
-        background-color: white;
-        color: #444;
+        width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
+        padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
     }
-    
-    /* 선택된 메뉴 버튼 강조 (눈이 편한 회색) */
     div.stButton > button[kind="primary"] {
-        background-color: #f0f2f6 !important;
-        color: #1f2937 !important;
-        border: 2px solid #9ca3af !important;
-        font-weight: 600 !important;
+        background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
     }
-
-    /* 마우스 호버 효과 */
     div.stButton > button:hover { border-color: #9ca3af; color: #111; }
     
-    /* 박스 콘텐츠 내부 정렬 보정 */
+    /* 콘텐츠 정렬 */
     .stFileUploader section, .stFileUploader label { text-align: left !important; align-items: flex-start !important; }
     .stTextArea textarea { text-align: left !important; }
-    [data-testid="stExpander"] div { text-align: left !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -97,7 +84,6 @@ for m_name in menu_items:
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-# Home 메뉴가 아닐 때만 부제목 표시 (Home 부제목 삭제 요청 반영)
 if current_menu != st.session_state.config["menu_0"]:
     sub_map = {
         st.session_state.config["menu_1"]: st.session_state.config["sub_menu1"],
@@ -108,7 +94,6 @@ if current_menu != st.session_state.config["menu_0"]:
 st.divider()
 
 # --- [4. 메뉴별 상세 기능] ---
-
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c1, c2 = st.columns(2)
@@ -124,24 +109,36 @@ if current_menu == st.session_state.config["menu_0"]:
     with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
     
     st.divider()
-    # 제목 수정: 차변계정 단축키
     st.subheader("⌨️ 차변계정 단축키")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_final")
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor")
     if st.button("💾 리스트 저장", key="btn_save_acc"):
         st.session_state.account_data = edited_df.to_dict('records')
         st.success("데이터가 저장되었습니다.")
 
 elif current_menu == st.session_state.config["menu_1"]:
     with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
-        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=250)
-        if st.button("💾 안내문 양식 저장", key="btn_save_msg"):
+        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=200)
+        if st.button("💾 안내문 양식 저장"):
             st.session_state.config["prompt_template"] = u_template
             st.success("저장되었습니다.")
-            st.rerun()
     st.divider()
     st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
     st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
 
 elif current_menu == st.session_state.config["menu_2"]:
     st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
+
+# --- [5. 하단 메모칸 추가] ---
+st.write("")
+st.write("")
+st.divider()
+st.subheader("📝 오늘의 메모")
+memo_text = st.text_area("잊기 쉬운 업무 내용이나 전달 사항을 적어두세요.", 
+                         value=st.session_state.daily_memo, 
+                         height=150, 
+                         placeholder="여기에 메모를 입력하세요...")
+
+if st.button("💾 메모 저장"):
+    st.session_state.daily_memo = memo_text
+    st.success("메모가 저장되었습니다.")
