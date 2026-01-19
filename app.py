@@ -16,8 +16,8 @@ if 'config' not in st.session_state:
         "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하세요.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하여 변환을 시작하세요.",
-        # 본문 상단에 표시될 안내문 양식
-        "prompt_template": """*2025 리베르떼-하반기 부가세 신고현황☆★{결과}
+        # {업체명} 변수가 추가된 기본 프롬프트 양식
+        "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
 감기 조심하시고 건강이 최고인거 아시죠? ^.<
 
 부가세 신고 마무리되어 전체 자료 전달드립니다.
@@ -50,50 +50,37 @@ def to_int(val):
 # --- [3. 메인 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-# --- [4. 사이드바: 메뉴명 및 기본 안내문 수정] ---
+# --- [4. 사이드바 설정] ---
 st.sidebar.title(st.session_state.config["sidebar_title"])
-
 menu_options = ["🏠 홈 (대시보드)", st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
 selected_menu = st.sidebar.pills(label=st.session_state.config["sidebar_label"], options=menu_options, selection_mode="single", default="🏠 홈 (대시보드)")
 
 with st.sidebar.expander("⚙️ 메뉴 명칭 수정"):
     st.session_state.config["menu_1"] = st.text_input("메뉴1 이름", st.session_state.config["menu_1"])
     st.session_state.config["menu_2"] = st.text_input("메뉴2 이름", st.session_state.config["menu_2"])
-    st.session_state.config["sub_home"] = st.text_area("홈 상단 문구", st.session_state.config["sub_home"])
-    st.session_state.config["sub_menu1"] = st.text_area("메뉴1 상단 문구", st.session_state.config["sub_menu1"])
-    if st.button("💾 이름 저장"):
+    if st.button("💾 명칭 저장"):
         st.rerun()
 
-# --- [5. 메인 화면 출력 및 정렬] ---
+# --- [5. 메인 화면 상단] ---
 st.title(selected_menu)
-
-# 현재 메뉴에 따른 상단 서브타이틀
 current_subtitle = st.session_state.config["sub_home"] if selected_menu == "🏠 홈 (대시보드)" else (st.session_state.config["sub_menu1"] if selected_menu == st.session_state.config["menu_1"] else st.session_state.config["sub_menu2"])
-
 st.markdown(f"""<div style="font-size: 14px; line-height: 1.5; color: #555; text-align: left !important; white-space: pre-line;">{current_subtitle}</div>""", unsafe_allow_html=True)
 st.divider()
 
 # --- [6. 메뉴별 로직] ---
 
-if selected_menu == "🏠 홈 (대시보드)":
-    st.subheader("🔗 바로가기")
-    cols = st.columns(2)
-    for i, item in enumerate(st.session_state.link_data):
-        cols[i % 2].link_button(item["name"], item["url"], use_container_width=True)
-
-elif selected_menu == st.session_state.config["menu_1"]:
-    # [수정] 안내문 프롬프트 수정란을 본문 상단으로 이동
-    with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=False):
+if selected_menu == st.session_state.config["menu_1"]:
+    # [수정] expanded=True로 설정하여 항상 열려 있게 함
+    with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=True):
         st.session_state.config["prompt_template"] = st.text_area(
             "이곳에서 수정하면 아래 결과에 즉시 반영됩니다.", 
             st.session_state.config["prompt_template"], 
             height=250
         )
-        st.caption("변수 안내: {매출액}, {매입액}, {결과}, {세액}")
+        st.caption("변수 안내: {업체명}, {매출액}, {매입액}, {결과}, {세액}")
     
     st.divider()
     
-    # 파일 업로드 섹션
     c1, c2 = st.columns(2)
     with c1: pdf_files = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
     with c2: xls_files = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
@@ -104,10 +91,11 @@ elif selected_menu == st.session_state.config["menu_1"]:
             try:
                 with pdfplumber.open(f) as pdf:
                     txt = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
+                    # PDF 내 상호명 자동 추출
                     name = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", txt)
                     biz = name.group(1).strip() if name else f.name.replace(".pdf","")
                     
-                    if biz not in reports: reports[biz] = {"매출":0, "매입":0, "세액":0, "결과":"납부"}
+                    if biz not in reports: reports[biz] = {"업체명": biz, "매출":0, "매입":0, "세액":0, "결과":"납부"}
                     
                     v_match = re.search(r"(?:납부할\s*세액|차가감납부할세액|환급받을\s*세액)\s*([0-9,.-]+)", txt)
                     if v_match:
@@ -116,14 +104,14 @@ elif selected_menu == st.session_state.config["menu_1"]:
                         reports[biz]["결과"] = "환급" if "환급" in txt or val < 0 else "납부"
             except: pass
         
-        # 분석 결과 및 프롬프트 적용 텍스트 생성
         if reports:
             st.subheader("📩 생성된 안내문")
             for biz, data in reports.items():
                 with st.container():
                     st.markdown(f"### 🏢 {biz}")
-                    # 본문 상단에서 수정한 템플릿을 사용하여 텍스트 생성
+                    # {업체명}을 포함하여 템플릿 치환
                     generated_msg = st.session_state.config["prompt_template"].format(
+                        업체명=data['업체명'],
                         매출액=f"{data['매출']:,}", 
                         매입액=f"{data['매입']:,}", 
                         결과=data['결과'], 
@@ -131,6 +119,13 @@ elif selected_menu == st.session_state.config["menu_1"]:
                     )
                     st.text_area(f"{biz} 전용 안내문 (복사용)", generated_msg, height=250, key=f"res_{biz}")
                     st.divider()
+
+# (홈 및 카드 변환 메뉴는 기존과 동일)
+elif selected_menu == "🏠 홈 (대시보드)":
+    st.subheader("🔗 바로가기")
+    cols = st.columns(2)
+    for i, item in enumerate(st.session_state.link_data):
+        cols[i % 2].link_button(item["name"], item["url"], use_container_width=True)
 
 elif selected_menu == st.session_state.config["menu_2"]:
     st.info("카드 변환 메뉴입니다. 엑셀 파일을 업로드해주세요.")
