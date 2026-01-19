@@ -131,4 +131,93 @@ st.markdown("""<style>
     section[data-testid="stSidebar"] div.stButton > button[kind="primary"] { background-color: #f0f2f6; color: #1f2937; border: 2px solid #9ca3af; font-weight: 600; }
 </style>""", unsafe_allow_html=True)
 
-# --- [3. 사이드바 및 메인 흐
+# --- [3. 사이드바 및 메인 흐름] ---
+with st.sidebar:
+    st.markdown("### 📁 Menu")
+    for m_name in [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]:
+        is_selected = (st.session_state.selected_menu == m_name)
+        if st.button(m_name, key=f"side_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
+            st.session_state.selected_menu = m_name
+            st.rerun()
+    
+    for _ in range(15): st.write("")
+    st.divider()
+    st.markdown("#### 📝 Memo")
+    side_memo = st.text_area("Memo Content", value=st.session_state.daily_memo, height=200, label_visibility="collapsed")
+    if st.button("💾 저장", use_container_width=True):
+        st.session_state.daily_memo = side_memo
+        st.success("저장완료")
+
+current_menu = st.session_state.selected_menu
+st.title(current_menu)
+st.divider()
+
+# --- HOME 메뉴 (복구 완료) ---
+if current_menu == st.session_state.config["menu_0"]:
+    st.subheader("🔗 바로가기")
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    
+    st.write("")
+    c3, c4, c5, c6 = st.columns(4)
+    links = st.session_state.link_group_2
+    with c3: st.link_button(links[0]["name"], links[0]["url"], use_container_width=True)
+    with c4: st.link_button(links[1]["name"], links[1]["url"], use_container_width=True)
+    with c5: st.link_button(links[2]["name"], links[2]["url"], use_container_width=True)
+    with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
+    
+    st.divider()
+    st.subheader("⌨️ 차변계정 단축키")
+    df_acc = pd.DataFrame(st.session_state.account_data)
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True)
+    if st.button("💾 리스트 저장"):
+        st.session_state.account_data = edited_df.to_dict('records')
+        st.success("저장되었습니다.")
+
+# --- 마감작업 메뉴 (PDF 변환 기능) ---
+elif current_menu == st.session_state.config["menu_1"]:
+    st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu1']}</p>", unsafe_allow_html=True)
+    with st.expander("💬 카톡 안내문 양식 편집", expanded=False):
+        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=150)
+        if st.button("💾 안내문 양식 저장"):
+            st.session_state.config["prompt_template"] = u_template
+            st.success("저장되었습니다.")
+
+    uploaded_file = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'])
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+        type_col = next((c for c in ['구분', '유형', '매출매입'] if c in df.columns), None)
+        biz_name_col = next((c for c in ['상호', '업체명', '거래처'] if c in df.columns), df.columns[0])
+        biz_name = str(df[biz_name_col].iloc[0]) if not df.empty else "업체명"
+
+        if type_col:
+            sales_df = df[df[type_col].str.contains('매출', na=False)]
+            purchase_df = df[df[type_col].str.contains('매입', na=False)]
+            st.info(f"📁 대상 업체: {biz_name}")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("📈 매출장")
+                if not sales_df.empty:
+                    pdf = ReportPDF("매 출 장", biz_name)
+                    pdf.alias_nb_pages()
+                    pdf.add_page()
+                    pdf.draw_table(sales_df)
+                    st.download_button("📥 매출장 PDF 다운로드", pdf.output(dest='S'), file_name=f"{biz_name}_매출장_{datetime.now().strftime('%Y%m%d')}.pdf")
+                else: st.write("내역 없음")
+
+            with c2:
+                st.subheader("📉 매입장")
+                if not purchase_df.empty:
+                    pdf = ReportPDF("매 입 장", biz_name)
+                    pdf.alias_nb_pages()
+                    pdf.add_page()
+                    pdf.draw_table(purchase_df)
+                    st.download_button("📥 매입장 PDF 다운로드", pdf.output(dest='S'), file_name=f"{biz_name}_매입장_{datetime.now().strftime('%Y%m%d')}.pdf")
+                else: st.write("내역 없음")
+
+# --- 카드 수기입력 메뉴 ---
+elif current_menu == st.session_state.config["menu_2"]:
+    st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu2']}</p>", unsafe_allow_html=True)
+    st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
