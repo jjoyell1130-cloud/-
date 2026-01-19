@@ -26,7 +26,7 @@ st.markdown("""
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* [메뉴 버튼] 사이드바 전체 너비 버튼 */
+    /* [메뉴 버튼] */
     section[data-testid="stSidebar"] div.stButton > button {
         width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
         padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
@@ -35,16 +35,23 @@ st.markdown("""
         background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
     }
 
-    /* [메모 저장 버튼 전용 스타일] 작고 슬림하게 */
+    /* [저장 버튼 전용] 훨씬 작고 슬림하게 수정 */
     .memo-save-container div.stButton > button {
-        width: auto !important; /* 너비를 글자에 맞춤 */
-        min-width: 80px;
-        height: 1.8rem !important; /* 높이를 더 낮춤 */
-        font-size: 12px !important;
-        padding: 0 10px !important;
-        background-color: #f8f9fa !important;
-        border: 1px solid #eee !important;
-        margin-top: 5px;
+        width: auto !important;
+        min-width: 50px !important; /* 너비 최소화 */
+        max-width: 60px !important;
+        height: 1.5rem !important;  /* 높이 최소화 */
+        line-height: 1.5rem !important;
+        padding: 0px 8px !important;
+        font-size: 11px !important; /* 폰트 크기 축소 */
+        background-color: #ffffff !important;
+        border: 1px solid #e0e0e0 !important;
+        margin-top: 2px !important;
+        color: #666 !important;
+    }
+    .memo-save-container div.stButton > button:hover {
+        border-color: #9ca3af !important;
+        color: #111 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -70,23 +77,21 @@ with st.sidebar:
     side_memo = st.text_area(
         "Memo Content", 
         value=st.session_state.daily_memo, 
-        height=200, 
-        placeholder="Enter your notes here...",
+        height=180, 
+        placeholder="메모를 입력하세요...",
         label_visibility="collapsed"
     )
     
-    # 메모 저장 버튼을 별도의 컨테이너로 감싸 스타일 적용
+    # 저장 버튼 컨테이너
     st.markdown('<div class="memo-save-container">', unsafe_allow_html=True)
-    if st.button("💾 Memo Save", key="memo_save_btn"):
+    if st.button("저장", key="memo_save_btn"):
         st.session_state.daily_memo = side_memo
-        st.success("Saved")
+        st.toast("메모가 저장되었습니다.") # success 대신 toast를 써서 화면을 덜 가리게 할 수 있습니다.
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [3. 메인 화면 출력 및 기능] ---
-# (이후 코드는 이전과 동일)
+# --- [3. 메인 화면] ---
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 st.divider()
-if current_menu == st.session_state.config["menu_0"]:
-    st.subheader("⌨️ 차변계정 단축키")
-    # ... (생략)
+
+# (이하 메인 콘텐츠 코드는 이전과 동일)
