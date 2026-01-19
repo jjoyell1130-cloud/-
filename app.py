@@ -1,78 +1,62 @@
 import streamlit as st
 import pandas as pd
 
-# --- [1. 세션 상태 및 설정 초기화] ---
-if 'config' not in st.session_state:
-    st.session_state.config = {
-        "menu_0": "🏠 Home", 
-        "menu_1": "⚖️ 마감작업", 
-        "menu_2": "💳 카드매입 수기입력건",
-        "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
-        "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
-        "prompt_template": """...""" # 이전과 동일
-    }
-
+# --- [1. 세션 상태 초기화] ---
 if 'daily_memo' not in st.session_state:
     st.session_state.daily_memo = ""
-
 if 'selected_menu' not in st.session_state:
-    st.session_state.selected_menu = st.session_state.config["menu_0"]
+    st.session_state.selected_menu = "🏠 Home"
+if 'account_data' not in st.session_state:
+    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제"}]
 
 # --- [2. 스타일 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
     <style>
+    /* 전체 레이아웃 정렬 */
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
-    h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* [메뉴 버튼] */
-    section[data-testid="stSidebar"] div.stButton > button {
+    /* [메뉴 버튼] 사이드바 전체 너비 버튼 */
+    section[data-testid="stSidebar"] .stButton > button {
         width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
-        padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
+        padding-left: 15px !important; margin-bottom: -5px; border: 1px solid #ddd; background-color: white; color: #444;
     }
-    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
         background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
     }
 
-    /* [저장 버튼 전용] 훨씬 작고 슬림하게 수정 */
-    .memo-save-container div.stButton > button {
-        width: auto !important;
-        min-width: 50px !important; /* 너비 최소화 */
-        max-width: 60px !important;
-        height: 1.5rem !important;  /* 높이 최소화 */
-        line-height: 1.5rem !important;
-        padding: 0px 8px !important;
-        font-size: 11px !important; /* 폰트 크기 축소 */
+    /* [저장 버튼] 전용 스타일 - 메뉴 버튼과 확실히 다르게 설정 */
+    div[data-testid="stSidebar"] .memo-save-area button {
+        height: 1.6rem !important;
+        min-height: 1.6rem !important;
+        width: 60px !important;
+        padding: 0px !important;
+        font-size: 11px !important;
         background-color: #ffffff !important;
-        border: 1px solid #e0e0e0 !important;
-        margin-top: 2px !important;
-        color: #666 !important;
-    }
-    .memo-save-container div.stButton > button:hover {
-        border-color: #9ca3af !important;
-        color: #111 !important;
+        border: 1px solid #ccc !important;
+        color: #333 !important;
+        border-radius: 4px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- [사이드바 구성] ---
+# --- [3. 사이드바 구성] ---
 with st.sidebar:
     st.markdown("### 📁 Menu")
-    st.write("")
     
-    menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
-    
-    for m_name in menu_items:
-        is_selected = (st.session_state.selected_menu == m_name)
-        if st.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
-            st.session_state.selected_menu = m_name
+    # 메뉴 리스트
+    menus = ["🏠 Home", "⚖️ 마감작업", "💳 카드매입 수기입력건"]
+    for m in menus:
+        is_selected = (st.session_state.selected_menu == m)
+        if st.button(m, key=f"m_btn_{m}", type="primary" if is_selected else "secondary"):
+            st.session_state.selected_menu = m
             st.rerun()
     
     st.write("")
-    st.write("")
     st.divider()
     
+    # Memo 섹션
     st.markdown("#### 📝 Memo")
     side_memo = st.text_area(
         "Memo Content", 
@@ -82,16 +66,29 @@ with st.sidebar:
         label_visibility="collapsed"
     )
     
-    # 저장 버튼 컨테이너
-    st.markdown('<div class="memo-save-container">', unsafe_allow_html=True)
-    if st.button("저장", key="memo_save_btn"):
-        st.session_state.daily_memo = side_memo
-        st.toast("메모가 저장되었습니다.") # success 대신 toast를 써서 화면을 덜 가리게 할 수 있습니다.
-    st.markdown('</div>', unsafe_allow_html=True)
+    # 저장 버튼 - st.columns를 사용하여 버튼 자체의 가로 점유율을 강제로 줄임
+    col1, col2 = st.columns([1, 3]) # 버튼을 왼쪽 1/4 칸에 배치
+    with col1:
+        st.markdown('<div class="memo-save-area">', unsafe_allow_html=True)
+        if st.button("저장", key="memo_save_btn"):
+            st.session_state.daily_memo = side_memo
+            st.toast("저장완료")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# --- [3. 메인 화면] ---
-current_menu = st.session_state.selected_menu
-st.title(current_menu)
+# --- [4. 메인 화면] ---
+st.title(st.session_state.selected_menu)
 st.divider()
 
-# (이하 메인 콘텐츠 코드는 이전과 동일)
+if st.session_state.selected_menu == "🏠 Home":
+    st.subheader("⌨️ 차변계정 단축키")
+    df_acc = pd.DataFrame(st.session_state.account_data)
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True)
+    if st.button("💾 리스트 저장"):
+        st.session_state.account_data = edited_df.to_dict('records')
+        st.success("저장되었습니다.")
+        
+elif st.session_state.selected_menu == "⚖️ 마감작업":
+    st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
+    
+elif st.session_state.selected_menu == "💳 카드매입 수기입력건":
+    st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
