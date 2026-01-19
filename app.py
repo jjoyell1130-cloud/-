@@ -200,15 +200,25 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# Menu 3: 카드 분리 (파일명 추출 로직 개선)
+# Menu 3: 카드 분리 (파일명 형식 수정)
 elif curr == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
-        # 파일명에서 업체명 추출 (연도나 공백, 수기입력 문구 제거)
+        # 1. 파일명 분석 (예: "2025 테일즈-하반기 카드사용내역(현대...)")
         raw_fn = os.path.splitext(card_up.name)[0]
-        biz_name = re.sub(r'^(20\d{2}|위하고_수기입력_|현대카드_|신한카드_)', '', raw_fn).strip().split('-')[0].split(' ')[0]
-        if not biz_name: biz_name = "카드분리"
+        
+        # 업체명 추출 (숫자, 연도, 수기입력 등 불필요한 단어 제거)
+        biz_name = re.sub(r'^(20\d{2}|위하고_수기입력_|국세청_|카드내역_)', '', raw_fn).strip()
+        biz_name = biz_name.split('-')[0].split(' ')[0].split('(')[0].strip()
+        
+        # 카드사 추출 (파일명에 포함된 카드사 찾기)
+        card_corp = "카드사"
+        for corp in ["현대", "삼성", "신한", "국민", "비씨", "하나", "우리", "농협", "롯데"]:
+            if corp in raw_fn:
+                card_corp = corp
+                break
 
+        # 2. 데이터 헤더 찾기 및 로드
         raw_df = pd.read_excel(card_up, header=None)
         header_idx = 0
         for i, row in raw_df.iterrows():
@@ -222,34 +232,41 @@ elif curr == st.session_state.config["menu_3"]:
         
         num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
         amt_col = next((c for c in df.columns if any(k in str(c) for k in ['이용 금액', '매출금액', '합계', '금액'])), None)
-        date_col = next((c for c in df.columns if '이용일' in str(c)), None)
         
         if num_col and amt_col:
+            # 3. 금액/날짜 데이터 정제
             def clean_amt(x):
                 s = str(x).replace('"', '').replace(',', '').strip()
                 return pd.to_numeric(s, errors='coerce')
 
             df[amt_col] = df[amt_col].apply(clean_amt).fillna(0)
-            if date_col:
-                df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%Y-%m-%d')
-
             df['공급가액'] = (df[amt_col] / 1.1).round(0).astype(int)
             df['부가세'] = df[amt_col].astype(int) - df['공급가액']
             
+            # 4. 카드번호별 파일 생성 및 압축
             z_buf = io.BytesIO()
             with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
                 for c_num, group in df.groupby(num_col):
                     if pd.isna(c_num) or str(c_num).strip() == "": continue
                     
+                    # 엑셀 파일 생성
                     excel_buf = io.BytesIO()
                     with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                         group.to_excel(writer, index=False)
                     
-                    # 파일명을 [업체명_카드뒷번호.xlsx] 형식으로 저장
+                    # 카드뒷번호 추출
                     safe_num = str(c_num).replace("-", "").strip()[-4:]
-                    zf.writestr(f"{biz_name}_{safe_num}.xlsx", excel_buf.getvalue())
+                    
+                    # 최종 파일명 설정: 업체명_카드사_카드뒷번호_(업로드용).xlsx
+                    final_filename = f"{biz_name}_{card_corp}_{safe_num}_(업로드용).xlsx"
+                    zf.writestr(final_filename, excel_buf.getvalue())
             
-            st.success(f"✅ {biz_name} 카드번호별 분리 완료!")
-            st.download_button(f"📥 {biz_name} 분리 결과 다운로드", data=z_buf.getvalue(), file_name=f"{biz_name}_카드분리.zip", use_container_width=True)
+            st.success(f"✅ {biz_name} 분리 작업 완료!")
+            st.download_button(
+                label=f"📥 {biz_name} 분리 결과 다운로드", 
+                data=z_buf.getvalue(), 
+                file_name=f"{biz_name}_카드분리_결과.zip", 
+                use_container_width=True
+            )
         else:
-            st.error("컬럼을 찾을 수 없습니다.")
+            st.error("카드번호 또는 금액 열을 찾을 수 없습니다.")
