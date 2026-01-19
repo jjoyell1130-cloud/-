@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진 및 PDF 추출] ---
+# --- [1. 기초 엔진] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -26,7 +26,8 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        return int(float(str(val).replace(',', '').replace('"', '').strip()))
+        s = str(val).replace('"', '').replace(',', '').strip()
+        return int(float(s))
     except: return 0
 
 def extract_data_from_pdf(files):
@@ -184,11 +185,11 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# --- [Menu 3: 카드 분리 (업체명_카드사_뒷번호_(업로드용) 완벽 대응)] ---
+# --- [Menu 3: 카드 분리 (업체명_카드사_뒷번호_(업로드용) 형식)] ---
 elif curr == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
-        # 1. 파일명 기반 정보 추출
+        # 1. 파일명 분석
         raw_fn = os.path.splitext(card_up.name)[0]
         biz_name = re.sub(r'^(20\d{2}|위하고_수기입력_|국세청_|카드내역_)', '', raw_fn).strip()
         biz_name = biz_name.split('-')[0].split(' ')[0].split('(')[0].strip()
@@ -199,31 +200,36 @@ elif curr == st.session_state.config["menu_3"]:
             if corp in raw_fn:
                 card_corp = corp; break
 
-        # 2. 데이터 헤더(제목줄) 위치 자동 탐색
+        # 2. 데이터 헤더 찾기 (9행 근처 탐색)
         raw_df = pd.read_excel(card_up, header=None)
         header_row_idx = None
         for i, row in raw_df.iterrows():
-            row_vals = [str(val) for val in row.values if pd.notna(val)]
-            if any('카드번호' in s for s in row_vals):
+            row_str = " ".join([str(v) for v in row.values if pd.notna(v)])
+            if '카드번호' in row_str and ('이용 금액' in row_str or '매출금액' in row_str):
                 header_row_idx = i; break
         
         if header_row_idx is not None:
             df = pd.read_excel(card_up, header=header_row_idx)
-            df = df.loc[:, ~df.columns.str.contains('^Unnamed')].dropna(how='all')
+            df = df.dropna(subset=[df.columns[0], df.columns[1]], how='all')
             
-            # 카드번호 및 금액 컬럼 찾기 (현대카드 '이용 금액' 키워드 추가)
             num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
-            amt_col = next((c for c in df.columns if any(k in str(c) for k in ['이용 금액', '매출금액', '합계', '금액'])), None)
+            amt_col = next((c for c in df.columns if any(k in str(c) for k in ['이용 금액', '매출금액', '금액'])), None)
             
             if num_col and amt_col:
-                # 3. 데이터 정제: 따옴표, 쉼표 제거 후 정수 변환
-                df[amt_col] = df[amt_col].astype(str).str.replace('"', '').str.replace(',', '').str.strip()
-                df[amt_col] = pd.to_numeric(df[amt_col], errors='coerce').fillna(0).astype(int)
+                # 3. 금액 데이터 정제 및 계산
+                def clean_value(x):
+                    if pd.isna(x): return 0
+                    s = str(x).replace('"', '').replace(',', '').strip()
+                    try: return int(float(s))
+                    except: return 0
+
+                df[amt_col] = df[amt_col].apply(clean_value)
+                df = df[df[amt_col] > 0].copy() # 0원 이하(헤더/푸터) 제외
                 
-                # 공급가액/부가세 계산
                 df['공급가액'] = (df[amt_col] / 1.1).round(0).astype(int)
                 df['부가세'] = df[amt_col] - df['공급가액']
                 
+                # 4. 파일 분리 및 압축
                 z_buf = io.BytesIO()
                 with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
                     for c_num, group in df.groupby(num_col):
@@ -233,15 +239,14 @@ elif curr == st.session_state.config["menu_3"]:
                         with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                             group.to_excel(writer, index=False)
                         
-                        # 카드뒷번호 4자리
                         safe_num = str(c_num).replace("-", "").strip()[-4:]
-                        # 요청하신 파일명 형식 적용
+                        # 요청하신 파일명 형식: 업체명_카드사_뒷번호_(업로드용).xlsx
                         final_filename = f"{biz_name}_{card_corp}_{safe_num}_(업로드용).xlsx"
                         zf.writestr(final_filename, excel_buf.getvalue())
                 
-                st.success(f"✅ {biz_name} ({card_corp}) 분리 작업이 완료되었습니다!")
+                st.success(f"✅ {biz_name} ({card_corp}) 분리 완료!")
                 st.download_button(f"📥 {biz_name} 결과 다운로드", data=z_buf.getvalue(), file_name=f"{biz_name}_카드분리.zip", use_container_width=True)
             else:
-                st.error("엑셀에서 '카드번호' 또는 '이용 금액' 컬럼을 찾을 수 없습니다.")
+                st.error("컬럼명을 찾지 못했습니다 (카드번호/이용 금액)")
         else:
-            st.error("현대카드 양식의 데이터 시작 지점을 찾지 못했습니다. 파일을 확인해 주세요.")
+            st.error("엑셀 데이터 시작 행을 찾지 못했습니다.")
