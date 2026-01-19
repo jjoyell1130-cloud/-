@@ -26,7 +26,7 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        return int(float(str(val).replace(',', '').replace('"', '')))
+        return int(float(str(val).replace(',', '').replace('"', '').strip()))
     except: return 0
 
 def extract_data_from_pdf(files):
@@ -133,7 +133,6 @@ curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
-# Menu 0: Home
 if curr == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c_top1, c_top2 = st.columns(2)
@@ -146,24 +145,10 @@ if curr == st.session_state.config["menu_0"]:
     with c_bot4: st.link_button("💳 카드매입자료", "https://docs.google.com/spreadsheets/", use_container_width=True)
     st.divider()
     st.subheader("⌨️ 전표 입력 가이드")
-    acc_data = [
-        ["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"],
-        ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"],
-        ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"],
-        ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""],
-        ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""],
-        ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""],
-        ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""],
-        ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""],
-        ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"],
-        ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""],
-        ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""],
-        ["소프트웨어 개발", "매입", "지급수수료", "831"]
-    ]
+    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
-# Menu 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
     st.subheader("📝 완성된 안내문 (복사용)")
     p_h = st.session_state.get("m1_pdf", [])
@@ -180,7 +165,6 @@ elif curr == st.session_state.config["menu_1"]:
     with col1: st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf")
     with col2: st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
 
-# Menu 2: PDF 변환
 elif curr == st.session_state.config["menu_2"]:
     f_pdf = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="m2_up")
     if f_pdf:
@@ -200,73 +184,64 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# Menu 3: 카드 분리 (파일명 형식 수정)
+# --- [Menu 3: 카드 분리 (업체명_카드사_뒷번호_(업로드용) 완벽 대응)] ---
 elif curr == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
-        # 1. 파일명 분석 (예: "2025 테일즈-하반기 카드사용내역(현대...)")
+        # 1. 파일명 기반 정보 추출
         raw_fn = os.path.splitext(card_up.name)[0]
-        
-        # 업체명 추출 (숫자, 연도, 수기입력 등 불필요한 단어 제거)
         biz_name = re.sub(r'^(20\d{2}|위하고_수기입력_|국세청_|카드내역_)', '', raw_fn).strip()
         biz_name = biz_name.split('-')[0].split(' ')[0].split('(')[0].strip()
-        
-        # 카드사 추출 (파일명에 포함된 카드사 찾기)
+        if not biz_name: biz_name = "업체명"
+
         card_corp = "카드사"
         for corp in ["현대", "삼성", "신한", "국민", "비씨", "하나", "우리", "농협", "롯데"]:
             if corp in raw_fn:
-                card_corp = corp
-                break
+                card_corp = corp; break
 
-        # 2. 데이터 헤더 찾기 및 로드
+        # 2. 데이터 헤더(제목줄) 위치 자동 탐색
         raw_df = pd.read_excel(card_up, header=None)
-        header_idx = 0
+        header_row_idx = None
         for i, row in raw_df.iterrows():
-            row_str = " ".join(row.astype(str))
-            if '카드번호' in row_str or '이용일' in row_str:
-                header_idx = i
-                break
+            row_vals = [str(val) for val in row.values if pd.notna(val)]
+            if any('카드번호' in s for s in row_vals):
+                header_row_idx = i; break
         
-        df = pd.read_excel(card_up, header=header_idx)
-        df = df.dropna(subset=[df.columns[0], df.columns[1]], how='all')
-        
-        num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
-        amt_col = next((c for c in df.columns if any(k in str(c) for k in ['이용 금액', '매출금액', '합계', '금액'])), None)
-        
-        if num_col and amt_col:
-            # 3. 금액/날짜 데이터 정제
-            def clean_amt(x):
-                s = str(x).replace('"', '').replace(',', '').strip()
-                return pd.to_numeric(s, errors='coerce')
-
-            df[amt_col] = df[amt_col].apply(clean_amt).fillna(0)
-            df['공급가액'] = (df[amt_col] / 1.1).round(0).astype(int)
-            df['부가세'] = df[amt_col].astype(int) - df['공급가액']
+        if header_row_idx is not None:
+            df = pd.read_excel(card_up, header=header_row_idx)
+            df = df.loc[:, ~df.columns.str.contains('^Unnamed')].dropna(how='all')
             
-            # 4. 카드번호별 파일 생성 및 압축
-            z_buf = io.BytesIO()
-            with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
-                for c_num, group in df.groupby(num_col):
-                    if pd.isna(c_num) or str(c_num).strip() == "": continue
-                    
-                    # 엑셀 파일 생성
-                    excel_buf = io.BytesIO()
-                    with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
-                        group.to_excel(writer, index=False)
-                    
-                    # 카드뒷번호 추출
-                    safe_num = str(c_num).replace("-", "").strip()[-4:]
-                    
-                    # 최종 파일명 설정: 업체명_카드사_카드뒷번호_(업로드용).xlsx
-                    final_filename = f"{biz_name}_{card_corp}_{safe_num}_(업로드용).xlsx"
-                    zf.writestr(final_filename, excel_buf.getvalue())
+            # 카드번호 및 금액 컬럼 찾기 (현대카드 '이용 금액' 키워드 추가)
+            num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
+            amt_col = next((c for c in df.columns if any(k in str(c) for k in ['이용 금액', '매출금액', '합계', '금액'])), None)
             
-            st.success(f"✅ {biz_name} 분리 작업 완료!")
-            st.download_button(
-                label=f"📥 {biz_name} 분리 결과 다운로드", 
-                data=z_buf.getvalue(), 
-                file_name=f"{biz_name}_카드분리_결과.zip", 
-                use_container_width=True
-            )
+            if num_col and amt_col:
+                # 3. 데이터 정제: 따옴표, 쉼표 제거 후 정수 변환
+                df[amt_col] = df[amt_col].astype(str).str.replace('"', '').str.replace(',', '').str.strip()
+                df[amt_col] = pd.to_numeric(df[amt_col], errors='coerce').fillna(0).astype(int)
+                
+                # 공급가액/부가세 계산
+                df['공급가액'] = (df[amt_col] / 1.1).round(0).astype(int)
+                df['부가세'] = df[amt_col] - df['공급가액']
+                
+                z_buf = io.BytesIO()
+                with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
+                    for c_num, group in df.groupby(num_col):
+                        if pd.isna(c_num) or str(c_num).strip() == "": continue
+                        
+                        excel_buf = io.BytesIO()
+                        with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+                            group.to_excel(writer, index=False)
+                        
+                        # 카드뒷번호 4자리
+                        safe_num = str(c_num).replace("-", "").strip()[-4:]
+                        # 요청하신 파일명 형식 적용
+                        final_filename = f"{biz_name}_{card_corp}_{safe_num}_(업로드용).xlsx"
+                        zf.writestr(final_filename, excel_buf.getvalue())
+                
+                st.success(f"✅ {biz_name} ({card_corp}) 분리 작업이 완료되었습니다!")
+                st.download_button(f"📥 {biz_name} 결과 다운로드", data=z_buf.getvalue(), file_name=f"{biz_name}_카드분리.zip", use_container_width=True)
+            else:
+                st.error("엑셀에서 '카드번호' 또는 '이용 금액' 컬럼을 찾을 수 없습니다.")
         else:
-            st.error("카드번호 또는 금액 열을 찾을 수 없습니다.")
+            st.error("현대카드 양식의 데이터 시작 지점을 찾지 못했습니다. 파일을 확인해 주세요.")
