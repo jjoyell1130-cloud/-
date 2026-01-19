@@ -56,13 +56,13 @@ class ReportPDF(FPDF):
             self.ln()
             fill = not fill
 
-# --- [1. 세션 상태 및 데이터 복구] ---
+# --- [1. 세션 상태 및 설정 초기화] ---
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", 
         "menu_1": "⚖️ 마감작업", 
         "menu_2": "💳 카드매입 수기입력건",
-        "sub_menu1": "매출매입장 엑셀을 업로드하면 매출장과 매입장 PDF로 각각 자동 변환됩니다.",
+        "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하시면 수기입력 양식으로 변환됩니다.",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
 감기 조심하시고 건강이 최고인거 아시죠? ^.<
@@ -93,7 +93,7 @@ if 'link_group_2' not in st.session_state:
         {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
     ]
 
-# 단축키 리스트 25개 전체 복구
+# 단축키 리스트 25개 복구
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"},
@@ -150,9 +150,10 @@ with st.sidebar:
 
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
-st.divider()
 
-# --- HOME 메뉴 (복구 완료) ---
+# --- [4. 메뉴별 기능 구현] ---
+
+# --- HOME ---
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c1, c2 = st.columns(2)
@@ -175,16 +176,25 @@ if current_menu == st.session_state.config["menu_0"]:
         st.session_state.account_data = edited_df.to_dict('records')
         st.success("저장되었습니다.")
 
-# --- 마감작업 메뉴 (PDF 변환 기능) ---
+# --- 마감작업 (국세청 PDF + 엑셀 PDF 변환 + 안내문) ---
 elif current_menu == st.session_state.config["menu_1"]:
     st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu1']}</p>", unsafe_allow_html=True)
-    with st.expander("💬 카톡 안내문 양식 편집", expanded=False):
-        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=150)
+    
+    # [복구] 안내문 양식 편집 섹션
+    with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
+        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=200)
         if st.button("💾 안내문 양식 저장"):
             st.session_state.config["prompt_template"] = u_template
             st.success("저장되었습니다.")
-
-    uploaded_file = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'])
+    
+    st.divider()
+    
+    # [복구] 국세청 PDF 업로드 란
+    st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True, key="pdf_uploader")
+    
+    # 매출매입장 엑셀 업로드 및 PDF 변환
+    uploaded_file = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], key="excel_uploader")
+    
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
         type_col = next((c for c in ['구분', '유형', '매출매입'] if c in df.columns), None)
@@ -200,6 +210,7 @@ elif current_menu == st.session_state.config["menu_1"]:
             with c1:
                 st.subheader("📈 매출장")
                 if not sales_df.empty:
+                    st.dataframe(sales_df, use_container_width=True)
                     pdf = ReportPDF("매 출 장", biz_name)
                     pdf.alias_nb_pages()
                     pdf.add_page()
@@ -210,14 +221,17 @@ elif current_menu == st.session_state.config["menu_1"]:
             with c2:
                 st.subheader("📉 매입장")
                 if not purchase_df.empty:
+                    st.dataframe(purchase_df, use_container_width=True)
                     pdf = ReportPDF("매 입 장", biz_name)
                     pdf.alias_nb_pages()
                     pdf.add_page()
                     pdf.draw_table(purchase_df)
                     st.download_button("📥 매입장 PDF 다운로드", pdf.output(dest='S'), file_name=f"{biz_name}_매입장_{datetime.now().strftime('%Y%m%d')}.pdf")
                 else: st.write("내역 없음")
+        else:
+            st.error("엑셀 파일에 '구분' 컬럼이 보이지 않습니다.")
 
-# --- 카드 수기입력 메뉴 ---
+# --- 카드매입 수기입력 ---
 elif current_menu == st.session_state.config["menu_2"]:
     st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu2']}</p>", unsafe_allow_html=True)
-    st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
+    st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True, key="card_uploader")
