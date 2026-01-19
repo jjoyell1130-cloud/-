@@ -7,7 +7,6 @@ if 'config' not in st.session_state:
         "menu_0": "🏠 Home", 
         "menu_1": "⚖️ 마감작업", 
         "menu_2": "💳 카드매입 수기입력건",
-        # Home 부제목은 사용하지 않으므로 삭제 처리
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
@@ -30,7 +29,7 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-# 데이터 초기화 (기존 데이터 유지)
+# 데이터 초기화 (바로가기 링크 & 단축키)
 if 'link_group_2' not in st.session_state:
     st.session_state.link_group_2 = [
         {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
@@ -51,7 +50,7 @@ st.markdown("""
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; margin-right: auto !important; text-align: left !important; }
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* 사이드바 메뉴 버튼 커스텀 (슬림 + 회색톤) */
+    /* 사이드바 메뉴 버튼 커스텀 (슬림 회색 디자인) */
     div.stButton > button {
         width: 100%;
         border-radius: 6px;
@@ -63,24 +62,20 @@ st.markdown("""
         border: 1px solid #ddd;
         background-color: white;
         color: #444;
-        transition: all 0.2s;
     }
     
-    /* 선택된 메뉴 (Primary) - 진한 회색 테두리와 연한 회색 배경 */
+    /* 선택된 메뉴 버튼 강조 (눈이 편한 회색) */
     div.stButton > button[kind="primary"] {
         background-color: #f0f2f6 !important;
         color: #1f2937 !important;
-        border: 2px solid #6b7280 !important;
+        border: 2px solid #9ca3af !important;
         font-weight: 600 !important;
     }
 
-    /* 마우스 호버 시 */
-    div.stButton > button:hover {
-        border-color: #6b7280;
-        color: #111;
-    }
+    /* 마우스 호버 효과 */
+    div.stButton > button:hover { border-color: #9ca3af; color: #111; }
     
-    /* 박스 콘텐츠(업로더, 에디터 등) 내부 왼쪽 정렬 */
+    /* 박스 콘텐츠 내부 정렬 보정 */
     .stFileUploader section, .stFileUploader label { text-align: left !important; align-items: flex-start !important; }
     .stTextArea textarea { text-align: left !important; }
     [data-testid="stExpander"] div { text-align: left !important; }
@@ -90,20 +85,11 @@ st.markdown("""
 st.sidebar.markdown("### 📁 Menu")
 st.sidebar.write("")
 
-menu_items = [
-    st.session_state.config["menu_0"],
-    st.session_state.config["menu_1"],
-    st.session_state.config["menu_2"]
-]
+menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
 
 for m_name in menu_items:
     is_selected = (st.session_state.selected_menu == m_name)
-    if st.sidebar.button(
-        m_name, 
-        key=f"m_btn_{m_name}", 
-        use_container_width=True, 
-        type="primary" if is_selected else "secondary"
-    ):
+    if st.sidebar.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
         st.session_state.selected_menu = m_name
         st.rerun()
 
@@ -111,7 +97,7 @@ for m_name in menu_items:
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-# 부제목 출력 로직 (Home 메뉴일 때는 부제목을 출력하지 않음)
+# Home 메뉴가 아닐 때만 부제목 표시 (Home 부제목 삭제 요청 반영)
 if current_menu != st.session_state.config["menu_0"]:
     sub_map = {
         st.session_state.config["menu_1"]: st.session_state.config["sub_menu1"],
@@ -138,21 +124,21 @@ if current_menu == st.session_state.config["menu_0"]:
     with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
     
     st.divider()
-    st.subheader("⌨️ 차변 계정 단축키 관리")
+    # 제목 수정: 차변계정 단축키
+    st.subheader("⌨️ 차변계정 단축키")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_vfinal")
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_final")
     if st.button("💾 리스트 저장", key="btn_save_acc"):
         st.session_state.account_data = edited_df.to_dict('records')
-        st.success("데이터가 안전하게 저장되었습니다.")
+        st.success("데이터가 저장되었습니다.")
 
 elif current_menu == st.session_state.config["menu_1"]:
     with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
         u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=250)
         if st.button("💾 안내문 양식 저장", key="btn_save_msg"):
             st.session_state.config["prompt_template"] = u_template
-            st.success("안내문 양식이 업데이트되었습니다.")
+            st.success("저장되었습니다.")
             st.rerun()
-            
     st.divider()
     st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
     st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
