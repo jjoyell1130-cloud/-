@@ -6,7 +6,7 @@ if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", 
         "menu_1": "⚖️ 마감작업", 
-        "menu_2": "💳 카드매입 수기입력건", # 제목 수정
+        "menu_2": "💳 카드매입 수기입력건",
         "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
@@ -30,7 +30,7 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-# 데이터 초기화 (바로가기 링크 & 단축키 데이터 25종 복구)
+# 데이터 초기화 (기존 데이터 유지)
 if 'link_group_2' not in st.session_state:
     st.session_state.link_group_2 = [
         {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
@@ -47,39 +47,58 @@ st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
     <style>
-    /* 전체 왼쪽 정렬 고정 */
-    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
-    h1, h2, h3, p, span, div { text-align: left !important; }
+    /* 전체 왼쪽 정렬 강제 고정 */
+    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; margin-right: auto !important; text-align: left !important; }
+    h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* 사이드바 메뉴 버튼 슬림 디자인 */
+    /* 사이드바 메뉴 버튼 커스텀 (슬림 + 회색톤) */
     div.stButton > button {
         width: 100%;
         border-radius: 6px;
-        height: 2.2rem; /* 슬림한 높이 */
-        font-size: 13px;
+        height: 2.2rem;
+        font-size: 14px;
         text-align: left !important;
         padding-left: 15px !important;
         margin-bottom: -10px;
+        border: 1px solid #ddd;
+        background-color: white;
+        color: #444;
+        transition: all 0.2s;
     }
+    
+    /* 선택된 메뉴 (Primary) - 진한 회색 테두리와 연한 회색 배경 */
+    div.stButton > button[kind="primary"] {
+        background-color: #f0f2f6 !important;
+        color: #1f2937 !important;
+        border: 2px solid #6b7280 !important;
+        font-weight: 600 !important;
+    }
+
+    /* 마우스 호버 시 */
+    div.stButton > button:hover {
+        border-color: #6b7280;
+        color: #111;
+    }
+    
+    /* 파일 업로더 및 에디터 내부 정렬 보정 */
+    .stFileUploader section { text-align: left !important; }
     </style>
     """, unsafe_allow_html=True)
 
 st.sidebar.markdown("### 📁 Menu")
 st.sidebar.write("")
 
-# 메뉴 리스트 구성
 menu_items = [
     st.session_state.config["menu_0"],
     st.session_state.config["menu_1"],
     st.session_state.config["menu_2"]
 ]
 
-# 버튼형 메뉴 구현 (선택 시 primary 색상으로 박스 강조)
 for m_name in menu_items:
     is_selected = (st.session_state.selected_menu == m_name)
     if st.sidebar.button(
         m_name, 
-        key=f"menu_{m_name}", 
+        key=f"m_btn_{m_name}", 
         use_container_width=True, 
         type="primary" if is_selected else "secondary"
     ):
@@ -90,13 +109,12 @@ for m_name in menu_items:
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-# 부제목 매칭
 sub_map = {
     st.session_state.config["menu_0"]: st.session_state.config["sub_home"],
     st.session_state.config["menu_1"]: st.session_state.config["sub_menu1"],
     st.session_state.config["menu_2"]: st.session_state.config["sub_menu2"]
 }
-st.markdown(f"<p style='color: #666; text-align: left;'>{sub_map[current_menu]}</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='color: #666; font-size: 15px;'>{sub_map[current_menu]}</p>", unsafe_allow_html=True)
 st.divider()
 
 # --- [4. 메뉴별 상세 기능] ---
@@ -118,18 +136,17 @@ if current_menu == st.session_state.config["menu_0"]:
     st.divider()
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor")
-    if st.button("💾 리스트 저장"):
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_v4")
+    if st.button("💾 리스트 저장", key="btn_save_acc"):
         st.session_state.account_data = edited_df.to_dict('records')
-        st.success("데이터가 저장되었습니다.")
+        st.success("데이터가 안전하게 저장되었습니다.")
 
 elif current_menu == st.session_state.config["menu_1"]:
-    # 인덴트 오류가 발생했던 구역 수정 완료
     with st.expander("💬 카카오톡 전송용 안내문", expanded=True):
         u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=250)
-        if st.button("💾 안내문 양식 저장"):
+        if st.button("💾 안내문 양식 저장", key="btn_save_msg"):
             st.session_state.config["prompt_template"] = u_template
-            st.success("양식이 저장되었습니다.")
+            st.success("안내문 양식이 업데이트되었습니다.")
             st.rerun()
             
     st.divider()
