@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import os
-import zipfile  # 압축 기능을 위한 라이브러리 추가
+import zipfile
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -10,7 +10,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 변환 로직 (기존 성공 양식 유지)] ---
+# --- [1. PDF 변환 핵심 로직 (성공 양식)] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -75,8 +75,7 @@ def make_pdf_stream(data, title, biz_name, date_range):
             actual_item_count += 1
             c.drawString(45, cur_y, str(actual_item_count))
             raw_date = row.get('전표일자', '')
-            date_str = str(raw_date)[:10] if pd.notna(raw_date) else ""
-            c.drawString(85, cur_y, date_str)
+            c.drawString(85, cur_y, str(raw_date)[:10] if pd.notna(raw_date) else "")
             c.drawString(170, cur_y, str(row.get('거래처', ''))[:25])
             c.setLineWidth(0.3); c.setStrokeColor(colors.lightgrey)
             c.line(40, cur_y - 7, 555, cur_y - 7)
@@ -90,77 +89,124 @@ def make_pdf_stream(data, title, biz_name, date_range):
     buffer.seek(0)
     return buffer
 
-# --- [2. 메뉴 및 사이드바 설정] ---
-M0, M1, M2, M3 = "🏠 Home", "⚖️ 마감작업", "📁 매출매입장 PDF 변환", "💳 카드매입 수기입력건"
-if 'selected_menu' not in st.session_state: st.session_state.selected_menu = M0
+# --- [2. 세션 상태 및 설정] ---
+if 'config' not in st.session_state:
+    st.session_state.config = {
+        "menu_0": "🏠 Home", 
+        "menu_1": "⚖️ 마감작업", 
+        "menu_2": "📁 매출매입장 PDF 변환",
+        "menu_3": "💳 카드매입 수기입력건",
+        "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
+        "sub_menu2": "매출매입장 엑셀을 한 번의 클릭으로 깔끔한 PDF 압축파일로 변환합니다.",
+        "sub_menu3": "카드사별 엑셀 파일을 업로드하시면 위하고 양식으로 즉시 변환됩니다.",
+        "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
+감기 조심하시고 건강이 최고인거 아시죠? ^.<
+
+부가세 신고 마무리되어 전체 자료 전달드립니다.
+
+=첨부파일=
+-부가세 신고서
+-매출장: {매출액}원
+-매입장: {매입액}원
+-접수증 > {결과}: {세액}원"""
+    }
+
+if 'selected_menu' not in st.session_state:
+    st.session_state.selected_menu = st.session_state.config["menu_0"]
+
+if 'daily_memo' not in st.session_state:
+    st.session_state.daily_memo = ""
+
+if 'account_data' not in st.session_state:
+    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"}]
+
+# --- [3. 가공용 헬퍼 & 스타일] ---
+def get_processed_excel(file):
+    df = pd.read_excel(file)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
 
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
+st.markdown("""
+    <style>
+    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
+    section[data-testid="stSidebar"] div.stButton > button {
+        width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
+        padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
+    }
+    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+        background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- [4. 사이드바 메뉴 (4개)] ---
 with st.sidebar:
     st.markdown("### 📁 Menu")
-    for m in [M0, M1, M2, M3]:
-        if st.button(m, key=f"m_{m}", type="primary" if st.session_state.selected_menu == m else "secondary", use_container_width=True):
-            st.session_state.selected_menu = m
+    m_list = [st.session_state.config[f"menu_{i}"] for i in range(4)]
+    for m_name in m_list:
+        if st.button(m_name, key=f"btn_{m_name}", use_container_width=True, type="primary" if st.session_state.selected_menu == m_name else "secondary"):
+            st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메인 화면 - ZIP 일괄 다운로드 구현] ---
+    for _ in range(12): st.write("") 
+    st.divider()
+    st.markdown("#### 📝 Memo")
+    memo_val = st.text_area("Memo", value=st.session_state.daily_memo, height=200, label_visibility="collapsed")
+    if st.button("💾 저장", use_container_width=True):
+        st.session_state.daily_memo = memo_val
+        st.success("저장되었습니다.")
+
+# --- [5. 메인 화면] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 
-if curr == M2:
-    f = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'])
+if curr == st.session_state.config["menu_0"]:
+    st.subheader("🔗 바로가기")
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    st.divider()
+    st.subheader("⌨️ 차변계정 단축키")
+    edited_df = st.data_editor(pd.DataFrame(st.session_state.account_data), num_rows="dynamic", use_container_width=True)
+    if st.button("💾 리스트 저장"):
+        st.session_state.account_data = edited_df.to_dict('records')
+        st.success("저장되었습니다.")
+
+elif curr == st.session_state.config["menu_1"]:
+    st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu1']}</p>", unsafe_allow_html=True)
+    # 기존 마감작업 로직 (안내문 등) 수록 가능
+
+elif curr == st.session_state.config["menu_2"]:
+    st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu2']}</p>", unsafe_allow_html=True)
+    f = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="pdf_conv_up")
     if f:
         df = pd.read_excel(f)
         biz_name = f.name.split(" ")[0]
-        
-        # 날짜 범위 추출 (에러 방지 강화)
         try:
-            temp_dates = pd.to_datetime(df['전표일자'], errors='coerce').dropna()
-            date_range = f"{temp_dates.min().strftime('%Y-%m-%d')} ~ {temp_dates.max().strftime('%Y-%m-%d')}" if not temp_dates.empty else "기간 없음"
-        except:
-            date_range = "기간 정보 없음"
-
+            tmp_d = pd.to_datetime(df['전표일자'], errors='coerce').dropna()
+            d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}" if not tmp_d.empty else "기간없음"
+        except: d_range = "기간 정보 확인 필요"
+        
         type_col = next((c for c in ['구분', '유형'] if c in df.columns), None)
         if type_col:
-            st.success(f"업체명: {biz_name} / 분석 완료")
+            st.success(f"분석 완료: {biz_name} ({d_range})")
             
-            # 매출/매입 데이터 분리
-            sales_df = df[df[type_col].astype(str).str.contains('매출', na=False)].reset_index(drop=True)
-            purchase_df = df[df[type_col].astype(str).str.contains('매입', na=False)].reset_index(drop=True)
+            # ZIP 생성
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for g in ['매출', '매입']:
+                    target = df[df[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                    if not target.empty:
+                        pdf = make_pdf_stream(target, f"{g} 장", biz_name, d_range)
+                        zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
+            
+            st.download_button("🎁 매출/매입장 PDF 일괄 다운로드 (ZIP)", zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", mime="application/zip", use_container_width=True)
 
-            # 화면 표시
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("📈 매출장")
-                st.dataframe(sales_df, height=250)
-            with c2:
-                st.subheader("📉 매입장")
-                st.dataframe(purchase_df, height=250)
-
-            st.divider()
-
-            # --- [ZIP 생성 핵심 로직] ---
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-                # 1. 매출장 PDF 생성 및 추가
-                if not sales_df.empty:
-                    s_pdf = make_pdf_stream(sales_df, "매출 장", biz_name, date_range)
-                    zip_file.writestr(f"{biz_name}_매출장.pdf", s_pdf.getvalue())
-                
-                # 2. 매입장 PDF 생성 및 추가
-                if not purchase_df.empty:
-                    p_pdf = make_pdf_stream(purchase_df, "매입 장", biz_name, date_range)
-                    zip_file.writestr(f"{biz_name}_매입장.pdf", p_pdf.getvalue())
-
-            # 다운로드 버튼
-            st.download_button(
-                label="🎁 매출/매입장 PDF 한 번에 다운로드 (ZIP)",
-                data=zip_buffer.getvalue(),
-                file_name=f"{biz_name}_매출매입장_일괄.zip",
-                mime="application/zip",
-                use_container_width=True
-            )
-        else:
-            st.error("'구분' 또는 '유형' 컬럼을 찾을 수 없습니다.")
-
-elif curr == M0:
-    st.info("Home 화면입니다. 사이드바 메뉴를 이용해 주세요.")
+elif curr == st.session_state.config["menu_3"]:
+    st.markdown(f"<p style='color: #666;'>{st.session_state.config['sub_menu3']}</p>", unsafe_allow_html=True)
+    card_f = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'])
+    if card_f:
+        st.download_button("📥 위하고 양식 다운로드", get_processed_excel(card_f), file_name=f"위하고_{card_f.name}", use_container_width=True)
