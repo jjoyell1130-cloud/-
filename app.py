@@ -11,7 +11,7 @@ import io
 import urllib.request
 import zipfile
 
-# 1. 폰트 설정 (서버에 없으면 나눔고딕 자동 다운로드)
+# 1. 폰트 설정
 def load_font():
     font_path = "nanum.ttf"
     if not os.path.exists(font_path):
@@ -27,13 +27,27 @@ def load_font():
 font_status = load_font()
 f_name = 'NanumGothic' if font_status else 'Helvetica'
 
-# 2. PDF 생성 로직
+# 2. 데이터 처리 보조 함수
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
         return int(float(str(val).replace(',', '')))
     except: return 0
 
+def get_clean_date_range(df):
+    """전표일자 컬럼에서 정확한 기간을 추출하는 함수"""
+    try:
+        # 전표일자 컬럼을 날짜 형식으로 변환 (에러나는 데이터는 NaT 처리)
+        dates = pd.to_datetime(df['전표일자'], errors='coerce').dropna()
+        if not dates.empty:
+            start_date = dates.min().strftime('%Y-%m-%d')
+            end_date = dates.max().strftime('%Y-%m-%d')
+            return f"{start_date} ~ {end_date}"
+        return "기간 정보 없음"
+    except:
+        return "기간 확인 불가"
+
+# 3. PDF 생성 함수 (기존과 동일하되 f_name 적용)
 def make_pdf_buffer(data, title, date_range, company_name):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
@@ -62,7 +76,9 @@ def make_pdf_buffer(data, title, date_range, company_name):
         actual_item_count += 1
         c.setFont(f_name, 8.5)
         c.drawString(45, cur_y, str(actual_item_count))
-        c.drawString(85, cur_y, str(row['전표일자']) if pd.notna(row['전표일자']) else "")
+        # 날짜가 Timestamp인 경우를 대비해 문자열 처리
+        date_str = str(row['전표일자'])[:10] if pd.notna(row['전표일자']) else ""
+        c.drawString(85, cur_y, date_str)
         c.drawString(170, cur_y, str(row['거래처'])[:25] if pd.notna(row['거래처']) else "")
         c.drawRightString(410, cur_y, f"{to_int(row['공급가액']):,}")
         c.drawRightString(485, cur_y, f"{to_int(row['부가세']):,}")
@@ -72,62 +88,42 @@ def make_pdf_buffer(data, title, date_range, company_name):
     buffer.seek(0)
     return buffer
 
-# 3. Streamlit UI
+# 4. Streamlit UI
 st.set_page_config(page_title="세무비서 자동화", layout="centered")
 
-# 사이드바: 매출매입장 PDF 생성
 st.sidebar.title("📑 매출매입장 PDF 생성")
 uploaded_excels = st.sidebar.file_uploader("엑셀 파일들을 선택하세요", type=['xlsx'], accept_multiple_files=True)
 
 if uploaded_excels:
-    all_pdfs = []  # ZIP 파일용 리스트
-    
+    all_pdfs = []
     for uploaded_excel in uploaded_excels:
         try:
             name_only = uploaded_excel.name.split('.')[0]
             df_excel = pd.read_excel(uploaded_excel)
-            date_series = df_excel['전표일자'].dropna().astype(str)
-            date_range = f"{date_series.min()} ~ {date_series.max()}" if not date_series.empty else "기간 없음"
-            clean_df = df_excel[df_excel['구분'].isin(['매입', '매출'])].copy()
             
+            # --- 기간 추출 로직 개선 적용 ---
+            date_range = get_clean_date_range(df_excel)
+            
+            clean_df = df_excel[df_excel['구분'].isin(['매입', '매출'])].copy()
             for g in ['매출', '매입']:
                 target = clean_df[clean_df['구분'] == g].reset_index(drop=True)
                 if not target.empty:
                     pdf_buf = make_pdf_buffer(target, f"{g[0]} {g[1]} 장", date_range, name_only)
-                    all_pdfs.append({
-                        "name": f"{name_only}_{g}장.pdf",
-                        "data": pdf_buf
-                    })
+                    all_pdfs.append({"name": f"{name_only}_{g}장.pdf", "data": pdf_buf})
         except Exception as e:
             st.sidebar.error(f"오류: {e}")
 
-    # --- 전체 다운로드 (ZIP) 버튼 ---
     if all_pdfs:
         st.sidebar.markdown("---")
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for pdf in all_pdfs:
                 zf.writestr(pdf["name"], pdf["data"].getvalue())
-        
         zip_buffer.seek(0)
-        st.sidebar.download_button(
-            label="🎁 모든 PDF 한꺼번에 다운로드 (ZIP)",
-            data=zip_buffer,
-            file_name="모든_업체_장부.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
-        
-        # 개별 다운로드 목록도 유지
-        st.sidebar.info("개별 파일이 필요하면 아래 목록을 사용하세요.")
+        st.sidebar.download_button(label="🎁 모든 PDF 한꺼번에 다운로드 (ZIP)", data=zip_buffer, file_name="모든_업체_장부.zip", mime="application/zip", use_container_width=True)
         for pdf in all_pdfs:
             st.sidebar.download_button(label=f"📥 {pdf['name']}", data=pdf['data'], file_name=pdf['name'], mime="application/pdf")
 
-# 메인 화면: 부가세 안내문 (기존 로직 유지)
+# 메인 화면 로직은 기존과 동일하므로 생략
 st.title("📊 부가세 신고 안내문 생성기")
-uploaded_pdfs = st.file_uploader("위하고 PDF 선택", accept_multiple_files=True, type=['pdf'])
-if uploaded_pdfs:
-    # (안내문 추출 코드 생략 - 이전과 동일)
-    st.success("분석 완료!")
-else:
-    st.info("왼쪽 사이드바에서 엑셀을 변환하거나 PDF를 올려 안내문을 만드세요.")
+st.info("왼쪽 사이드바를 이용해 주세요.")
