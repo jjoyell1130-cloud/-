@@ -54,31 +54,50 @@ st.markdown("""
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
     /* 사이드바 회색톤 디자인 */
-    div.stButton > button {
+    section[data-testid="stSidebar"] div.stButton > button {
         width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
         padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
     }
-    div.stButton > button[kind="primary"] {
+    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
         background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
     }
-    div.stButton > button:hover { border-color: #9ca3af; color: #111; }
     
-    /* 콘텐츠 정렬 */
-    .stFileUploader section, .stFileUploader label { text-align: left !important; align-items: flex-start !important; }
-    .stTextArea textarea { text-align: left !important; }
+    /* 사이드바 내부 텍스트 에어리어 스타일링 */
+    section[data-testid="stSidebar"] .stTextArea textarea {
+        font-size: 13px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.sidebar.markdown("### 📁 Menu")
-st.sidebar.write("")
-
-menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
-
-for m_name in menu_items:
-    is_selected = (st.session_state.selected_menu == m_name)
-    if st.sidebar.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
-        st.session_state.selected_menu = m_name
-        st.rerun()
+# --- [사이드바: 메뉴 및 메모칸] ---
+with st.sidebar:
+    st.markdown("### 📁 Menu")
+    st.write("")
+    
+    menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
+    
+    for m_name in menu_items:
+        is_selected = (st.session_state.selected_menu == m_name)
+        if st.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
+            st.session_state.selected_menu = m_name
+            st.rerun()
+    
+    # 사이드바 하단 메모칸 추가
+    st.write("")
+    st.write("")
+    st.divider()
+    st.markdown("#### 📝 오늘의 메모")
+    # 사이드바 전용 메모창
+    side_memo = st.sidebar.text_area(
+        "전달사항 기록", 
+        value=st.session_state.daily_memo, 
+        height=200, 
+        placeholder="여기에 메모를 입력하세요...",
+        label_visibility="collapsed" # 라벨 숨김으로 깔끔하게
+    )
+    if st.sidebar.button("💾 메모 저장", use_container_width=True):
+        st.session_state.daily_memo = side_memo
+        st.sidebar.success("저장됨")
 
 # --- [3. 메인 화면 출력] ---
 current_menu = st.session_state.selected_menu
@@ -128,17 +147,3 @@ elif current_menu == st.session_state.config["menu_1"]:
 
 elif current_menu == st.session_state.config["menu_2"]:
     st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
-
-# --- [5. 하단 메모칸 추가] ---
-st.write("")
-st.write("")
-st.divider()
-st.subheader("📝 오늘의 메모")
-memo_text = st.text_area("잊기 쉬운 업무 내용이나 전달 사항을 적어두세요.", 
-                         value=st.session_state.daily_memo, 
-                         height=150, 
-                         placeholder="여기에 메모를 입력하세요...")
-
-if st.button("💾 메모 저장"):
-    st.session_state.daily_memo = memo_text
-    st.success("메모가 저장되었습니다.")
