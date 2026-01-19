@@ -7,8 +7,9 @@ st.set_page_config(page_title="세무비서 자동화", layout="wide")
 
 st.markdown("""
     <style>
+    /* 업로드 영역 아래 파일 리스트가 길어지는 것 방지 */
     .st-emotion-cache-1erivf3 { 
-        max-height: 250px; 
+        max-height: 180px; 
         overflow-y: auto !important; 
     }
     </style>
@@ -38,14 +39,13 @@ uploaded_files = st.file_uploader("위하고 PDF 파일들을 올려주세요", 
 
 if uploaded_files:
     file_names = [f.name for f in uploaded_files]
+    
+    # 상단 요약 정보
     st.info(f"📁 총 {len(file_names)}개의 파일이 정상적으로 로드되었습니다.")
     
-    # 업체명 추출 (에러 방지를 위해 여러 줄로 나누어 작성)
+    # 업체명 추출
     first_name = file_names[0]
-    if '_' in first_name:
-        biz_name = first_name.split('_')[0]
-    else:
-        biz_name = "알 수 없음"
+    biz_name = first_name.split('_')[0] if '_' in first_name else "알 수 없음"
     
     m_sales, m_buy, m_refund = "0", "0", "0"
 
@@ -53,4 +53,4 @@ if uploaded_files:
         with pdfplumber.open(file) as pdf:
             full_text = ""
             for page in pdf.pages:
-                page_text
+                # 에러 방지: 텍스트 추출 결과가 없으면 빈 문자열 처리
