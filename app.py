@@ -1,17 +1,25 @@
+import streamlit as st
+import pdfplumber
 import pandas as pd
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import streamlit as st
-import pdfplumber
 import os
 
-# 1. 폰트 설정 (경로가 정확해야 합니다)
-pdfmetrics.registerFont(TTFont('MalgunGothic', "C:/Windows/Fonts/malgun.ttf"))
+# --- 폰트 설정 (GitHub에 올린 malgun.ttf 파일을 읽도록 수정) ---
+@st.cache_resource
+def load_font():
+    font_path = "malgun.ttf"  # GitHub에 업로드할 파일명과 일치해야 함
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
+        return True
+    return False
 
-# --- PDF 생성 함수 로직 ---
+font_status = load_font()
+
+# --- PDF 생성 보조 함수 ---
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
@@ -35,6 +43,7 @@ def make_pdf(data, title, filename, date_range):
             c.drawString(50, height - 90, "회사명 : 에덴인테리어")
             c.drawString(50, height - 105, f"기  간 : {date_range}") 
             c.drawRightString(width - 50, height - 90, f"페이지 : {p_num}")
+            
             yh = 680 
             c.setLineWidth(1.5)
             c.line(40, yh + 15, 555, yh + 15)
@@ -54,7 +63,8 @@ def make_pdf(data, title, filename, date_range):
         
         def check_summary(r):
             if r is None: return False
-            t_no, t_vendor = str(r.get('번호', '')), str(r.get('거래처', ''))
+            t_no = str(r.get('번호', ''))
+            t_vendor = str(r.get('거래처', ''))
             txt = (t_no + t_vendor).replace(" ", "").replace("[", "").replace("]", "")
             return any(k in txt for k in summary_keywords)
 
@@ -85,38 +95,40 @@ def make_pdf(data, title, filename, date_range):
 
     c.save()
 
-# --- Streamlit UI 구성 ---
+# --- Streamlit UI ---
 st.set_page_config(page_title="세무비서 자동화", layout="centered")
 
-# 사이드바에 새로운 기능 추가
+# 사이드바 기능
 st.sidebar.title("📁 추가 기능")
-if st.sidebar.button("📊 매출,매입장 PDF 생성하기"):
-    try:
-        excel_file = "에덴인테리어 매입매출장.xlsx"
-        if os.path.exists(excel_file):
-            df = pd.read_excel(excel_file)
-            date_series = df['전표일자'].dropna().astype(str)
-            date_series = date_series[date_series.str.contains(r'\d', na=False)]
-            date_range = f"{date_series.min()} ~ {date_series.max()}" if not date_series.empty else "기간 없음"
-            
-            clean_df = df[df['구분'].isin(['매입', '매출'])].copy()
-            for g in ['매출', '매입']:
-                target = clean_df[clean_df['구분'] == g].reset_index(drop=True)
-                if not target.empty:
-                    make_pdf(target, f"{g[0]} {g[1]} 장", f"에덴인테리어_{g}장.pdf", date_range)
-            st.sidebar.success("✅ PDF 생성 완료!")
-        else:
-            st.sidebar.error("❌ '에덴인테리어 매입매출장.xlsx' 파일을 찾을 수 없습니다.")
-    except Exception as e:
-        st.sidebar.error(f"❌ 오류 발생: {e}")
+if st.sidebar.button("📊 매출, 매입장 생성하기"):
+    if not font_status:
+        st.sidebar.error("❌ malgun.ttf 폰트 파일이 없습니다. GitHub에 업로드해주세요.")
+    else:
+        try:
+            excel_path = "에덴인테리어 매입매출장.xlsx"
+            if os.path.exists(excel_path):
+                df_excel = pd.read_excel(excel_path)
+                date_series = df_excel['전표일자'].dropna().astype(str)
+                date_range = f"{date_series.min()} ~ {date_series.max()}" if not date_series.empty else "기간 없음"
+                
+                clean_df = df_excel[df_excel['구분'].isin(['매입', '매출'])].copy()
+                for g in ['매출', '매입']:
+                    target = clean_df[clean_df['구분'] == g].reset_index(drop=True)
+                    if not target.empty:
+                        make_pdf(target, f"{g[0]} {g[1]} 장", f"에덴인테리어_{g}장.pdf", date_range)
+                st.sidebar.success("✅ PDF 생성 완료! (서버 폴더 확인)")
+            else:
+                st.sidebar.error("❌ '에덴인테리어 매입매출장.xlsx' 파일을 찾을 수 없습니다.")
+        except Exception as e:
+            st.sidebar.error(f"❌ 오류 발생: {e}")
 
+# 메인 기능
 st.title("📊 부가세 신고 안내문 생성기")
 st.write("위하고에서 받은 PDF 파일들을 아래에 올려주세요.")
 
 uploaded_files = st.file_uploader("PDF 파일을 모두 선택하세요", accept_multiple_files=True, type=['pdf'])
 
 if uploaded_files:
-    # 1. 업체명 추출
     first_file_name = uploaded_files[0].name
     biz_name = first_file_name.split('_')[0] if '_' in first_file_name else "알 수 없음"
     report_data = {"매출": "0", "매입": "0", "환급": "0"}
@@ -139,7 +151,6 @@ if uploaded_files:
                     if "차가감납부할세액" in line:
                         report_data["환급"] = "".join([c for c in line if c.isdigit() or c == ','])
 
-    # 2. 결과 리포트 출력
     final_text = f"""=첨부파일=
 -부가세 신고서
 -매출장: {report_data['매출']}원
