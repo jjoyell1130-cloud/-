@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 
 # --- [1. 세션 상태 및 설정 초기화] ---
 if 'config' not in st.session_state:
@@ -44,7 +45,17 @@ if 'link_group_2' not in st.session_state:
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"}, {"단축키": "812", "거래처": "편의점", "계정명": "여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "830", "거래처": "다이소", "계정명": "소모품비", "분류": "매입"}, {"단축키": "811", "거래처": "식당", "계정명": "복리후생비", "분류": "공제유무확인후 분류"}, {"단축키": "146", "거래처": "거래처", "계정명": "상품", "분류": "매입"}, {"단축키": "830", "거래처": "홈쇼핑, 인터넷구매", "계정명": "소모품비", "분류": "매입"}, {"단축키": "822", "거래처": "주차장, 적은금액세금", "계정명": "차량유지비", "분류": "일반"}, {"단축키": "-", "거래처": "휴게소", "계정명": "차량/여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "-", "거래처": "전기요금", "계정명": "전력비", "분류": "매입"}, {"단축키": "-", "거래처": "수도요금", "계정명": "수도광열비", "분류": "일반"}, {"단축키": "814", "거래처": "통신비", "계정명": "통신비", "분류": "매입"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "세금과공과", "분류": "일반"}, {"단축키": "830", "거래처": "약국", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "모텔", "계정명": "출장비/여비교통비", "분류": "일반"}, {"단축키": "831", "거래처": "캡스, 보안, 홈페이지", "계정명": "지급수수료", "분류": "매입"}, {"단축키": "-", "거래처": "아울렛(작업복)", "계정명": "소모품비", "분류": "매입"}, {"단축키": "820", "거래처": "컴퓨터 AS", "계정명": "수선비", "분류": "매입"}, {"단축키": "830", "거래처": "결제대행업체", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "신용카드 알림", "계정명": "지급수수료", "분류": "일반"}, {"단축키": "-", "거래처": "휴대폰 소액결제", "계정명": "소모품비", "분류": "일반"}, {"단축키": "146", "거래처": "매입 항목", "계정명": "상품", "분류": "매입"}, {"단축키": "-", "거래처": "병원", "계정명": "복리후생비", "분류": "일반"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "로카모빌리티", "계정명": "소모품비", "분류": "일반"}, {"단축키": "831", "거래처": "소프트웨어 개발/공급", "계정명": "지급수수료", "분류": "지급수수료"}]
 
-# --- [2. 스타일 설정] ---
+# --- [2. 기능 함수] ---
+def process_excel(uploaded_file):
+    # 업로드된 엑셀을 읽어서 변환하는 로직 (현재는 그대로 반환)
+    df = pd.read_excel(uploaded_file)
+    # TODO: 여기에 구체적인 데이터 가공 로직 추가 가능
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+    return output.getvalue()
+
+# --- [3. 스타일 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
@@ -52,7 +63,6 @@ st.markdown("""
     .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
     h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
     
-    /* 사이드바 회색 강조 디자인 */
     section[data-testid="stSidebar"] div.stButton > button {
         width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
         padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
@@ -76,8 +86,6 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-    # --- 하단 배치를 위한 빈 공간 확보 ---
-    # st.sidebar 객체 내부에서 루프를 돌려 하단으로 밀어냄
     for _ in range(15):
         st.write("")
     
@@ -96,7 +104,7 @@ with st.sidebar:
         st.session_state.daily_memo = side_memo
         st.success("저장되었습니다.")
 
-# --- [3. 메인 화면 출력] ---
+# --- [4. 메인 화면 출력] ---
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
@@ -106,7 +114,6 @@ if current_menu != st.session_state.config["menu_0"]:
 
 st.divider()
 
-# --- [4. 메뉴별 상세 기능] ---
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c1, c2 = st.columns(2)
@@ -136,8 +143,23 @@ elif current_menu == st.session_state.config["menu_1"]:
             st.session_state.config["prompt_template"] = u_template
             st.success("저장되었습니다.")
     st.divider()
+    
     st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True, key="pdf_uploader")
-    st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True, key="excel_uploader")
+    
+    # --- 매출매입장 업로드 및 즉시 다운로드 로직 ---
+    st.markdown("##### 📊 2. 매출매입장 엑셀 업로드")
+    excel_file = st.file_uploader("excel_uploader_label", type=['xlsx'], accept_multiple_files=False, key="excel_uploader", label_visibility="collapsed")
+    
+    if excel_file is not None:
+        processed_data = process_excel(excel_file)
+        st.success(f"✅ {excel_file.name} 처리 완료!")
+        st.download_button(
+            label="📥 가공된 매출매입장 다운로드",
+            data=processed_data,
+            file_name=f"가공_{excel_file.name}",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 elif current_menu == st.session_state.config["menu_2"]:
     st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True, key="card_uploader")
