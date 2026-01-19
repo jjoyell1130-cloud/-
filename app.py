@@ -32,10 +32,10 @@ if uploaded_files:
     first_file_name = uploaded_files[0].name
     biz_name = first_file_name.split('_')[0] if '_' in first_file_name else "알 수 없음"
     
-    # 데이터 저장용 변수
-    m_sales = "0" # 매출
-    m_buy = "0"   # 매입
-    m_refund = "0" # 환급
+    # 데이터 저장용 변수 초기화
+    m_sales = "0"
+    m_buy = "0"
+    m_refund = "0"
 
     for file in uploaded_files:
         with pdfplumber.open(file) as pdf:
@@ -48,9 +48,3 @@ if uploaded_files:
                 m_buy = extract_amount(text, "누계매입")
             elif "접수증" in fname or "신고서" in fname:
                 m_refund = extract_amount(text, "차가감납부할세액")
-
-    # 4. 결과 조립
-    final_greeting = greeting_text.replace("{biz_name}", biz_name)
-    
-    report_content = (
-        f"{final_greeting}\
