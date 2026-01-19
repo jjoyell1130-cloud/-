@@ -12,23 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 생성 및 추출 엔진] ---
-try:
-    font_path = "malgun.ttf"
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
-        FONT_NAME = 'MalgunGothic'
-    else:
-        FONT_NAME = 'Helvetica'
-except:
-    FONT_NAME = 'Helvetica'
-
-def to_int(val):
-    try:
-        if pd.isna(val) or str(val).strip() == "": return 0
-        return int(float(str(val).replace(',', '')))
-    except: return 0
-
+# --- [1. PDF 추출 엔진: 위하고 양식 정밀 보정] ---
 def extract_data_from_pdf(files):
     """위하고 양식의 매출/매입장 및 접수증 금액 정밀 추출"""
     data = {"매출액": "0", "매입액": "0", "세액": "0", "결과": "납부"}
@@ -48,10 +32,11 @@ def extract_data_from_pdf(files):
                     data["결과"] = "환급" if "환급" in full_text_clean or amt < 0 else "납부"
                     data["세액"] = f"{abs(amt):,}"
 
-            # 2. 매출장/매입장 (위하고 양식 하단 합계 추출)
+            # 2. 매출장/매입장 (파일명 기반 및 하단 합계 추출)
             is_sales = "매출" in file.name
             is_purchase = "매입" in file.name
             if (is_sales or is_purchase) and pages:
+                # 마지막 페이지 하단에서 '합계' 줄 탐색
                 last_page_lines = pages[-1].split("\n")
                 for line in reversed(last_page_lines):
                     if any(k in line for k in ["합계", "총계", "누계"]):
@@ -62,30 +47,87 @@ def extract_data_from_pdf(files):
                             break
     return data
 
+# --- [2. PDF 변환 엔진: 폰트 및 생성] ---
+try:
+    font_path = "malgun.ttf"
+    if os.path.exists(font_path):
+        pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
+        FONT_NAME = 'MalgunGothic'
+    else:
+        FONT_NAME = 'Helvetica'
+except:
+    FONT_NAME = 'Helvetica'
+
+def to_int(val):
+    try:
+        if pd.isna(val) or str(val).strip() == "": return 0
+        return int(float(str(val).replace(',', '')))
+    except: return 0
+
 def make_pdf_stream(data, title, biz_name, date_range):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
-    rows_per_page = 28
-    for i in range(0, len(data), rows_per_page):
-        if i > 0: c.showPage()
-        c.setFont(FONT_NAME, 16); c.drawCentredString(width/2, height-50, title)
-        c.setFont(FONT_NAME, 10); c.drawString(50, height-80, f"업체명: {biz_name} | 기간: {date_range}")
-        y = height - 110
-        chunk = data.iloc[i:i+rows_per_page]
-        for _, row in chunk.iterrows():
+    rows_per_page = 26
+    actual_item_count = 0 
+    summary_keywords = ['합계', '월계', '분기', '반기', '누계']
+
+    for i in range(len(data)):
+        if i % rows_per_page == 0:
+            if i > 0: c.showPage()
+            p_num = (i // rows_per_page) + 1
+            c.setFont(FONT_NAME, 18)
+            c.drawCentredString(width/2, height - 60, title)
+            c.setFont(FONT_NAME, 10)
+            c.drawString(50, height - 90, f"회사명 : {biz_name}")
+            c.drawString(50, height - 105, f"기  간 : {date_range}") 
+            c.drawRightString(width - 50, height - 90, f"페이지 : {p_num}")
+            
+            yh = 680 
+            c.setLineWidth(1.2); c.line(40, yh + 15, 555, yh + 15)
             c.setFont(FONT_NAME, 9)
-            c.drawString(50, y, str(row.get('거래처', ''))[:20])
-            c.drawRightString(400, y, f"{to_int(row.get('공급가액', 0)):,}")
-            c.drawRightString(550, y, f"{to_int(row.get('합계', 0)):,}")
-            y -= 22
-    c.save(); buffer.seek(0)
+            c.drawString(45, yh, "번호"); c.drawString(90, yh, "일자")
+            c.drawString(180, yh, "거래처(적요)")
+            c.drawRightString(420, yh, "공급가액"); c.drawRightString(485, yh, "부가가치세")
+            c.drawRightString(550, yh, "합계")
+            c.line(40, yh - 8, 555, yh - 8)
+            y_start = yh - 28
+        
+        row = data.iloc[i]
+        cur_y = y_start - ((i % rows_per_page) * 23)
+        
+        txt = (str(row.get('번호', '')) + str(row.get('거래처', ''))).replace(" ", "")
+        is_summary = any(k in txt for k in summary_keywords)
+
+        c.setFont(FONT_NAME, 8.5)
+        if is_summary:
+            c.setFont(FONT_NAME, 9)
+            c.drawString(90, cur_y, str(row.get('거래처', row.get('번호', ''))))
+            c.line(40, cur_y + 16, 555, cur_y + 16)
+            c.line(40, cur_y - 7, 555, cur_y - 7)
+        else:
+            actual_item_count += 1
+            c.drawString(45, cur_y, str(actual_item_count))
+            raw_date = row.get('전표일자', row.get('일자', ''))
+            c.drawString(85, cur_y, str(raw_date)[:10] if pd.notna(raw_date) else "")
+            c.drawString(170, cur_y, str(row.get('거래처', ''))[:25])
+            c.setStrokeColor(colors.lightgrey); c.line(40, cur_y - 7, 555, cur_y - 7); c.setStrokeColor(colors.black)
+        
+        c.drawRightString(410, cur_y, f"{to_int(row.get('공급가액', 0)):,}")
+        c.drawRightString(485, cur_y, f"{to_int(row.get('부가세', 0)):,}")
+        c.drawRightString(550, cur_y, f"{to_int(row.get('합계', 0)):,}")
+
+    c.save()
+    buffer.seek(0)
     return buffer
 
-# --- [2. 세션 및 메뉴 설정] ---
+# --- [3. 세션 상태 및 레이아웃 설정] ---
 if 'config' not in st.session_state:
     st.session_state.config = {
-        "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건",
+        "menu_0": "🏠 Home", 
+        "menu_1": "⚖️ 마감작업", 
+        "menu_2": "📁 매출매입장 PDF 변환",
+        "menu_3": "💳 카드매입 수기입력건",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
 감기 조심하시고 건강이 최고인거 아시죠? ^.<
 
@@ -104,75 +146,113 @@ if 'selected_menu' not in st.session_state:
 
 st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
 
-# 사이드바 (모든 메뉴 복구)
 with st.sidebar:
     st.markdown("### 📁 Menu")
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
         m_name = st.session_state.config[k]
-        if st.button(m_name, use_container_width=True, type="primary" if st.session_state.selected_menu == m_name else "secondary"):
+        if st.button(m_name, key=f"btn_{k}", use_container_width=True, 
+                     type="primary" if st.session_state.selected_menu == m_name else "secondary"):
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메뉴별 화면 로직] ---
-curr = st.session_state.selected_menu
-st.title(curr)
+# --- [4. 메인 화면 로직] ---
+current_menu = st.session_state.selected_menu
+st.title(current_menu)
+st.divider()
 
-# --- 메뉴 1: 마감작업 ---
-if curr == st.session_state.config["menu_1"]:
+# --- Menu 0: Home ---
+if current_menu == st.session_state.config["menu_0"]:
+    st.subheader("🔗 바로가기")
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+
+# --- Menu 1: 마감작업 (안내문 최상단) ---
+elif current_menu == st.session_state.config["menu_1"]:
     st.subheader("📝 완성된 안내문 (복사용)")
     p_h = st.session_state.get("m1_pdf", [])
     p_l = st.session_state.get("m1_ledger", [])
-    all_up = (p_h if p_h else []) + (p_l if p_l else [])
+    all_files = (p_h if p_h else []) + (p_l if p_l else [])
     
-    if all_up:
-        res = extract_data_from_pdf(all_up)
-        biz = all_up[0].name.split("_")[0]
+    if all_files:
+        res = extract_data_from_pdf(all_files)
+        # 업체명 추출 (파일명에서 첫 단어)
+        first_name = all_files[0].name
+        biz = first_name.split("_")[0] if "_" in first_name else first_name.split(" ")[0]
+        
         msg = st.session_state.config["prompt_template"].format(
             업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"]
         )
         st.code(msg, language="text")
+        st.success("✅ 위 내용을 복사하여 사용하세요.")
     else:
-        st.warning("아래에 PDF를 업로드하면 안내문이 자동 완성됩니다.")
+        st.warning("아래 PDF 파일들을 업로드하면 안내문이 자동 생성됩니다.")
 
     st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("📄 국세청 PDF")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("📄 국세청 PDF 업로드")
         st.file_uploader("신고서/접수증", type=['pdf'], accept_multiple_files=True, key="m1_pdf")
-    with c2:
-        st.subheader("📊 매출매입장 PDF")
-        st.file_uploader("변환된 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
+    with col2:
+        st.subheader("📊 매출매입장 PDF 업로드")
+        st.file_uploader("변환된 매출매입장", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
 
-    with st.expander("⚙️ 양식 설정"):
-        tmp = st.text_area("템플릿 수정", value=st.session_state.config["prompt_template"], height=200)
-        if st.button("💾 저장"):
-            st.session_state.config["prompt_template"] = tmp
+    with st.expander("⚙️ 안내문 양식 설정"):
+        u_tmp = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=200)
+        if st.button("💾 양식 저장"):
+            st.session_state.config["prompt_template"] = u_tmp
+            st.success("저장되었습니다.")
             st.rerun()
 
-# --- 메뉴 2: PDF 변환 ---
-elif curr == st.session_state.config["menu_2"]:
-    f_up = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'], key="m2_up")
-    if f_up:
-        df = pd.read_excel(f_up)
-        biz = f_up.name.split(" ")[0]
-        type_col = next((c for c in ['구분', '유형'] if c in df.columns), None)
-        if type_col:
-            zip_buf = io.BytesIO()
-            with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
-                for g in ['매출', '매입']:
-                    tgt = df[df[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
-                    if not tgt.empty:
-                        pdf = make_pdf_stream(tgt, f"{g} 장", biz, "2025년")
-                        zf.writestr(f"{biz}_{g}장.pdf", pdf.getvalue())
-            st.download_button("🎁 PDF 일괄 다운로드 (ZIP)", data=zip_buf.getvalue(), file_name=f"{biz}_PDF변환.zip")
+# --- Menu 2: PDF 일괄 변환 ---
+elif current_menu == st.session_state.config["menu_2"]:
+    f_pdf = st.file_uploader("📊 엑셀 파일 업로드 (PDF 변환용)", type=['xlsx'], key="m2_up")
+    if f_pdf:
+        df_all = pd.read_excel(f_pdf)
+        biz_name = f_pdf.name.split(" ")[0]
+        try:
+            tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
+            d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}"
+        except: d_range = "2025년도"
 
-# --- 메뉴 3: 카드 분리 ---
-elif curr == st.session_state.config["menu_3"]:
+        type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
+        if type_col:
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for g in ['매출', '매입']:
+                    target = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                    if not target.empty:
+                        pdf = make_pdf_stream(target, f"{g} 장", biz_name, d_range)
+                        zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
+            st.download_button(label="🎁 PDF 일괄 다운로드 (ZIP)", data=zip_buffer.getvalue(), 
+                               file_name=f"{biz_name}_매출매입장.zip", mime="application/zip", use_container_width=True)
+
+# --- Menu 3: 카드 분리 ---
+elif current_menu == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
-        df_card = pd.read_excel(card_up)
-        st.success("카드 데이터 로드 완료. (가공 로직 실행 가능)")
-
-# --- 메뉴 0: Home ---
-elif curr == st.session_state.config["menu_0"]:
-    st.write("세무 업무 효율화를 위한 통합 관리 시스템입니다. 왼쪽 메뉴를 선택하세요.")
+        raw_fn = os.path.splitext(card_up.name)[0]
+        clean_name = re.sub(r'\(.*?\)', '', raw_fn.replace("위하고_수기입력_", "")).strip()
+        temp_df = pd.read_excel(card_up, header=None)
+        target_row = next((i for i, r in temp_df.iterrows() if any(k in " ".join(r.astype(str)) for k in ['카드번호', '매출금액'])), 0)
+        df = pd.read_excel(card_up, header=target_row)
+        df = df.drop(columns=[c for c in df.columns if 'Unnamed' in str(c) or c in ['취소여부', '매출구분']])
+        dt_col = next((c for c in df.columns if '이용일' in str(c)), None)
+        if dt_col: df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce').dt.strftime('%Y-%m-%d')
+        
+        num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
+        amt_col = next((c for c in df.columns if any(k in str(c) for k in ['매출금액', '금액'])), None)
+        co_col = next((c for c in df.columns if any(k in str(c) for k in ['카드사', '기관'])), None)
+        
+        if num_col and amt_col:
+            z_buf = io.BytesIO()
+            with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
+                for c_num, group in df.groupby(num_col):
+                    if pd.isna(c_num): continue
+                    up_df = group.copy()
+                    c_co = str(group[co_col].iloc[0]) if co_col else "카드"
+                    excel_buf = io.BytesIO()
+                    with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+                        up_df.to_excel(writer, index=False)
+                    zf.writestr(f"{clean_name}_{c_co}_{str(c_num)[-4:]}.xlsx", excel_buf.getvalue())
+            st.download_button("📥 카드분리 다운로드 (ZIP)", data=z_buf.getvalue(), file_name=f"{clean_name}_카드분리.zip", use_container_width=True)
