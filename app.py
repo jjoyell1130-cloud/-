@@ -80,7 +80,6 @@ with st.sidebar:
     st.write("")
     st.divider()
     
-    # 제목 변경: Memo
     st.markdown("#### 📝 Memo")
     side_memo = st.text_area(
         "Memo Content", 
@@ -89,7 +88,8 @@ with st.sidebar:
         placeholder="Enter your notes here...",
         label_visibility="collapsed"
     )
-    if st.button("💾 Memo Save", use_container_width=True):
+    # 버튼 명칭 변경: 저장
+    if st.button("💾 저장", use_container_width=True):
         st.session_state.daily_memo = side_memo
         st.success("Saved")
 
