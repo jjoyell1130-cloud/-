@@ -92,7 +92,7 @@ if 'config' not in st.session_state:
         "menu_1": "⚖️ 마감작업", 
         "menu_2": "📁 매출매입장 PDF 변환",
         "menu_3": "💳 카드매입 수기입력건",
-        "sub_menu1": "PDF 변환 완료된 매출매입장을 관리하고 카톡 안내문을 작성합니다.",
+        "sub_menu1": "국세청 PDF와 변환된 매출매입장 PDF를 업로드하여 마감 작업을 진행합니다.",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
 감기 조심하시고 건강이 최고인거 아시죠? ^.<
 
@@ -130,7 +130,7 @@ current_menu = st.session_state.selected_menu
 st.title(current_menu)
 st.divider()
 
-# --- Menu 1: 마감작업 (PDF 변환본 관리형) ---
+# --- Menu 1: 마감작업 (PDF 업로드 중심) ---
 if current_menu == st.session_state.config["menu_1"]:
     st.info(st.session_state.config["sub_menu1"])
     
@@ -144,26 +144,26 @@ if current_menu == st.session_state.config["menu_1"]:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📄 국세청 PDF 관리")
-        pdf_up = st.file_uploader("국세청 자료 업로드", type=['pdf'], accept_multiple_files=True, key="m1_pdf")
-        if pdf_up:
-            st.download_button("📥 업로드된 PDF 다운로드", data=pdf_up[0].getvalue(), file_name="국세청자료_마감.pdf", use_container_width=True)
+        st.subheader("📄 국세청 PDF 업로드")
+        pdf_hometax = st.file_uploader("국세청 자료 (PDF)", type=['pdf'], accept_multiple_files=True, key="m1_hometax")
+        if pdf_hometax:
+            st.success(f"{len(pdf_hometax)}개의 파일 업로드됨")
 
     with col2:
-        st.subheader("📊 매출매입장(PDF 변환본) 관리")
-        excel_up = st.file_uploader("변환 완료된 엑셀 업로드", type=['xlsx'], key="m1_excel")
-        if excel_up:
-            # 여기서는 추가 계산 없이 업로드된 파일을 바로 확인/다운로드할 수 있게 유지합니다.
-            st.success("매출매입장 파일이 준비되었습니다.")
-            st.download_button("📥 파일 확인 및 다운로드", data=excel_up.getvalue(), file_name=f"최종_{excel_up.name}", use_container_width=True)
+        st.subheader("📊 매출매입장 PDF 업로드")
+        pdf_ledger = st.file_uploader("변환된 매출매입장 (PDF)", type=['pdf'], accept_multiple_files=True, key="m1_ledger")
+        if pdf_ledger:
+            st.success(f"{len(pdf_ledger)}개의 파일 업로드됨")
+            # 업로드된 파일들을 리스트로 보여주거나 다운로드 확인
+            for f in pdf_ledger:
+                st.caption(f"✅ {f.name} 준비 완료")
 
-# --- Menu 2: PDF 일괄 변환 (매출/매입 구분 ZIP) ---
+# --- Menu 2: PDF 일괄 변환 (이전 로직 유지) ---
 elif current_menu == st.session_state.config["menu_2"]:
     f_pdf = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'], key="m2_up")
     if f_pdf:
         df_all = pd.read_excel(f_pdf)
         biz_name = f_pdf.name.split(" ")[0]
-        
         type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
         if type_col:
             zip_buffer = io.BytesIO()
@@ -173,11 +173,10 @@ elif current_menu == st.session_state.config["menu_2"]:
                     if not target.empty:
                         pdf = make_pdf_stream(target, f"{g} 장", biz_name, "2025년")
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
-            
             st.download_button(label="🎁 매출/매입장 PDF 일괄 다운로드 (ZIP)", data=zip_buffer.getvalue(),
                                file_name=f"{biz_name}_매출매입장_일괄.zip", mime="application/zip", use_container_width=True)
 
-# --- Menu 3: 카드 분리 (불필요 열 삭제 + 날짜 간소화 + 분리) ---
+# --- Menu 3: 카드 분리 (이전 로직 유지) ---
 elif current_menu == st.session_state.config["menu_3"]:
     card_up = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="m3_up")
     if card_up:
@@ -186,16 +185,11 @@ elif current_menu == st.session_state.config["menu_3"]:
         temp_df = pd.read_excel(card_up, header=None)
         target_row = next((i for i, r in temp_df.iterrows() if any(k in " ".join(r.astype(str)) for k in ['카드번호', '매출금액'])), 0)
         df = pd.read_excel(card_up, header=target_row)
-        
-        # 열 삭제 및 날짜 간소화
         df = df.drop(columns=[c for c in df.columns if 'Unnamed' in str(c) or c in ['취소여부', '매출구분']])
         dt_col = next((c for c in df.columns if '이용일' in str(c)), None)
         if dt_col: df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce').dt.strftime('%Y-%m-%d')
-        
         num_col = next((c for c in df.columns if '카드번호' in str(c)), None)
-        amt_col = next((c for c in df.columns if any(k in str(c) for k in ['매출금액', '금액', '합계'])), None)
-        
-        if num_col and amt_col:
+        if num_col:
             z_buf = io.BytesIO()
             with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
                 for c_num, group in df.groupby(num_col):
