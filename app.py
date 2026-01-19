@@ -32,18 +32,21 @@ if 'config' not in st.session_state:
 25일 까지는 수정이 가능합니다!"""
     }
 
-# [복구] 요청하신 순서대로 링크 6개 재정렬
-if 'link_data' not in st.session_state:
-    st.session_state.link_data = [
+# 링크 데이터 정의
+if 'link_group_1' not in st.session_state:
+    st.session_state.link_group_1 = [
         {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
-        {"name": "🏠 홈택스", "url": "https://hometax.go.kr/"},
+        {"name": "🏠 홈택스", "url": "https://hometax.go.kr/"}
+    ]
+
+if 'link_group_2' not in st.session_state:
+    st.session_state.link_group_2 = [
         {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
         {"name": "📁 상반기 자료", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
         {"name": "📁 하반기 자료", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
         {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
     ]
 
-# [복구] 차변 계정 단축키 전체 리스트
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"구분": "차량/교통", "주요 거래처": "유류대, 주차장, 하이패스", "분류": "공제유무확인", "계정명": "차량유지비", "코드": "822"},
@@ -87,10 +90,18 @@ st.divider()
 
 if selected_menu == "🏠 홈 (대시보드)":
     st.subheader("🔗 바로가기")
-    # 6개 링크이므로 3개씩 2줄 혹은 한 줄에 6개 배치 (여기서는 한 줄에 배치)
-    link_cols = st.columns(len(st.session_state.link_data))
-    for i, item in enumerate(st.session_state.link_data):
-        link_cols[i].link_button(item["name"], item["url"], use_container_width=True)
+    
+    # 첫 번째 줄: 주요 사이트
+    col_group1 = st.columns(2)
+    for i, item in enumerate(st.session_state.link_group_1):
+        col_group1[i].link_button(item["name"], item["url"], use_container_width=True)
+    
+    st.write("") # 간격 조절
+    
+    # 두 번째 줄: 자료 및 리스트 (한 칸 내림)
+    col_group2 = st.columns(4)
+    for i, item in enumerate(st.session_state.link_group_2):
+        col_group2[i].link_button(item["name"], item["url"], use_container_width=True)
     
     st.divider()
     
@@ -106,7 +117,6 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.session_state.memo_content = st.text_area("내용을 입력하세요", value=st.session_state.memo_content, height=200)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # 상단 고정 안내문 양식
     with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=True):
         st.session_state.config["prompt_template"] = st.text_area("양식 수정", st.session_state.config["prompt_template"], height=250)
         st.caption("변수: {업체명}, {매출액}, {매입액}, {결과}, {세액}")
