@@ -10,12 +10,12 @@ if 'config' not in st.session_state:
     st.session_state.config = {
         "sidebar_title": "🗂️ 업무 메뉴",
         "sidebar_label": "업무 선택",
-        # 요청에 따른 메뉴 명칭 변경 (이모티콘 유지)
         "menu_1": "⚖️ 마감작업", 
         "menu_2": "💳 카드내역서 엑셀 변환",
         "sub_home": "🏠 홈: 단축키 관리 및 주요 링크 바로가기",
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
-        "sub_menu2": "카드사별 엑셀 파일을 업로드하여 변환을 시작하세요.",
+        # [최종 수정] 문장을 더 매끄럽게 다듬어 반영했습니다.
+        "sub_menu2": "카드내역 엑셀파일을 업로드하시면 위하고(WEHAGO) 전용 업로드 양식으로 변환됩니다.",
         "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
 감기 조심하시고 건강이 최고인거 아시죠? ^.<
 
@@ -33,7 +33,7 @@ if 'config' not in st.session_state:
 25일 까지는 수정이 가능합니다!"""
     }
 
-# 링크 및 단축키 데이터는 이전 설정 유지
+# 바로가기 링크 및 단축키 데이터 설정 (이전과 동일)
 if 'link_group_1' not in st.session_state:
     st.session_state.link_group_1 = [
         {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
@@ -83,12 +83,10 @@ if 'memo_content' not in st.session_state:
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.sidebar.title(st.session_state.config["sidebar_title"])
-# 사이드바 메뉴 옵션 구성
 menu_options = ["🏠 홈 (대시보드)", st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
 selected_menu = st.sidebar.pills(label=st.session_state.config["sidebar_label"], options=menu_options, selection_mode="single", default="🏠 홈 (대시보드)")
 
 st.title(selected_menu)
-# 선택된 메뉴에 따른 부제목 설정
 current_subtitle = st.session_state.config["sub_home"] if selected_menu == "🏠 홈 (대시보드)" else (st.session_state.config["sub_menu1"] if selected_menu == st.session_state.config["menu_1"] else st.session_state.config["sub_menu2"])
 st.markdown(f"""<div style="font-size: 14px; line-height: 1.5; color: #555; text-align: left !important; white-space: pre-line;">{current_subtitle}</div>""", unsafe_allow_html=True)
 st.divider()
@@ -110,7 +108,7 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_acc = pd.DataFrame(st.session_state.account_data)
     df_acc = df_acc[["단축키", "거래처", "계정명", "분류"]]
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_updated")
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor_v5")
     
     if st.button("💾 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
@@ -121,7 +119,6 @@ if selected_menu == "🏠 홈 (대시보드)":
     st.session_state.memo_content = st.text_area("내용을 입력하세요", value=st.session_state.memo_content, height=200)
 
 elif selected_menu == st.session_state.config["menu_1"]:
-    # '마감작업' 관련 기능
     with st.expander("📝 카톡 안내문 양식 편집 (치환 변수 포함)", expanded=True):
         st.session_state.config["prompt_template"] = st.text_area("양식 수정", st.session_state.config["prompt_template"], height=250)
     st.divider()
@@ -129,6 +126,5 @@ elif selected_menu == st.session_state.config["menu_1"]:
     st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
 
 elif selected_menu == st.session_state.config["menu_2"]:
-    # '카드내역서 엑셀 변환' 관련 기능
-    st.info("카드사별 엑셀 파일을 업로드하여 변환을 시작하세요.")
+    # 정정된 안내 문구가 표시되는 구역
     st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
