@@ -30,7 +30,16 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
-# [데이터 복구] 사라졌던 단축키 데이터 25종 전체 복구
+# [복구] 바로가기 링크 데이터 4종 추가
+if 'link_group_2' not in st.session_state:
+    st.session_state.link_group_2 = [
+        {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
+        {"name": "📁 상반기 자료", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
+        {"name": "📁 하반기 자료", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
+        {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
+    ]
+
+# [복구] 단축키 데이터 25종 전체
 if 'account_data' not in st.session_state:
     st.session_state.account_data = [
         {"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"},
@@ -63,11 +72,12 @@ if 'account_data' not in st.session_state:
 # --- [2. 스타일 및 사이드바 설정] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
-# 모든 텍스트 왼쪽 정렬 강제 스타일
+# 모든 텍스트 왼쪽 정렬 강제 적용
 st.markdown("""
     <style>
     .main .block-container {text-align: left !important;}
     div.stMarkdown {text-align: left !important;}
+    div.stText {text-align: left !important;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -83,6 +93,7 @@ for menu_name in [st.session_state.config["menu_0"], st.session_state.config["me
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
+# 부제목 설정
 if current_menu == st.session_state.config["menu_0"]:
     subtitle = st.session_state.config["sub_home"]
 elif current_menu == st.session_state.config["menu_1"]:
@@ -97,15 +108,25 @@ st.divider()
 
 if current_menu == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
-    # 링크 버튼 (2단 구성 생략 시 가독성을 위해 바로 작성)
-    col1, col2 = st.columns(2)
-    with col1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
-    with col2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    # 1단 링크
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    
+    st.write("") # 간격 조절
+    
+    # [복구된 구역] 2단 링크 (4개)
+    c3, c4, c5, c6 = st.columns(4)
+    links = st.session_state.link_group_2
+    with c3: st.link_button(links[0]["name"], links[0]["url"], use_container_width=True)
+    with c4: st.link_button(links[1]["name"], links[1]["url"], use_container_width=True)
+    with c5: st.link_button(links[2]["name"], links[2]["url"], use_container_width=True)
+    with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
     
     st.divider()
     st.subheader("⌨️ 차변 계정 단축키 관리")
     df_acc = pd.DataFrame(st.session_state.account_data)
-    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="main_editor")
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="main_editor_v2")
     
     if st.button("💾 단축키 리스트 저장"):
         st.session_state.account_data = edited_df.to_dict('records')
