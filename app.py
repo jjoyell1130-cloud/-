@@ -5,31 +5,21 @@ import re
 import zipfile
 import pdfplumber
 from datetime import datetime
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-import os
 
-# --- [관리자 설정] 링크 ---
-QUICK_LINKS = {
-    "WEHAGO (위하고)": "https://www.wehago.com/#/main",
-    "홈택스 (Hometax)": "https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&menuCd=index3",
-    "📊 신고리스트 (구글시트)": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true",
-    "📁 부가세 상반기 자료": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3",
-    "📁 부가세 하반기 자료": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0",
-    "💳 카드자료 보관함": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"
-}
+# --- [초기 기본값] 프로그램 시작 시 보일 기본 이름과 링크 ---
+if 'link_data' not in st.session_state:
+    st.session_state.link_data = [
+        {"name": "WEHAGO (위하고)", "url": "https://www.wehago.com/#/main"},
+        {"name": "홈택스 (Hometax)", "url": "https://hometax.go.kr/websquare/websquare.html?w2xPath=/ui/pp/index_pp.xml&menuCd=index3"},
+        {"name": "📊 신고리스트", "url": "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?rtpof=true&sd=true"},
+        {"name": "📁 부가세 상반기", "url": "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3"},
+        {"name": "📁 부가세 하반기", "url": "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r0"},
+        {"name": "💳 카드자료 보관함", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
+    ]
 
 # --- 기본 설정 ---
 st.set_page_config(page_title="세무비서 통합 시스템", layout="wide")
 
-# 폰트 로드 (PDF 생성용)
-def get_font():
-    # 기본 폰트 설정 (시스템 환경에 따라 조정)
-    return "Helvetica"
-
-# 유틸리티 함수
 def to_int(val):
     try:
         if pd.isna(val): return 0
@@ -46,22 +36,45 @@ def format_date(val):
 
 # --- 사이드바 메뉴 ---
 st.sidebar.title("🗂️ 업무 메뉴")
-menu = st.sidebar.radio("원하는 업무를 선택하세요:", ["🏠 홈 (대시보드)", "⚖️ 매출매입장 PDF & 안내문", "💳 카드별 개별 엑셀 변환"])
+menu = st.sidebar.radio("업무 선택:", ["🏠 홈 (대시보드)", "⚖️ 매출매입장 PDF & 안내문", "💳 카드별 개별 엑셀 변환"])
+
+# --- [공통] 링크 및 이름 수정 설정창 ---
+with st.expander("⚙️ 바로가기 버튼 이름 및 주소 수정하기"):
+    st.write("버튼에 표시될 이름과 연결 주소를 자유롭게 수정하세요.")
+    new_link_data = []
+    
+    # 3행 2열 구조로 수정 입력칸 배치
+    for i in range(len(st.session_state.link_data)):
+        col_n, col_u = st.columns([1, 2])
+        with col_n:
+            updated_name = st.text_input(f"버튼 {i+1} 이름", value=st.session_state.link_data[i]["name"], key=f"name_{i}")
+        with col_u:
+            updated_url = st.text_input(f"버튼 {i+1} 주소", value=st.session_state.link_data[i]["url"], key=f"url_{i}")
+        new_link_data.append({"name": updated_name, "url": updated_url})
+    
+    # 수정 사항 저장
+    if st.button("설정 저장하기"):
+        st.session_state.link_data = new_link_data
+        st.success("버튼 설정이 업데이트되었습니다!")
 
 # --- [1. 홈 화면] ---
 if menu == "🏠 홈 (대시보드)":
     st.title("🚀 세무 업무 통합 대시보드")
-    st.subheader("🔗 바로가기")
+    st.markdown("---")
+    
+    st.subheader("🔗 업무 바로가기")
     cols = st.columns(3)
-    for i, (name, url) in enumerate(QUICK_LINKS.items()):
-        cols[i % 3].link_button(name, url, use_container_width=True)
+    
+    # 세션 상태에 저장된 이름과 링크로 버튼 생성
+    for i, item in enumerate(st.session_state.link_data):
+        cols[i % 3].link_button(item["name"], item["url"], use_container_width=True)
+    
     st.divider()
-    st.info("왼쪽 메뉴에서 업무를 선택하면 자동화 도구가 실행됩니다.")
+    st.info("왼쪽 사이드바에서 업무를 선택하면 자동화 도구가 실행됩니다.")
 
 # --- [2. 매출매입장 & 안내문] ---
 elif menu == "⚖️ 매출매입장 PDF & 안내문":
     st.title("⚖️ 매출매입장 PDF 분석 및 안내문")
-    
     c1, c2 = st.columns(2)
     with c1:
         tax_pdfs = st.file_uploader("1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
@@ -69,12 +82,10 @@ elif menu == "⚖️ 매출매입장 PDF & 안내문":
         excel_ledgers = st.file_uploader("2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
 
     final_reports = {}
-    
     if tax_pdfs:
         for f in tax_pdfs:
             with pdfplumber.open(f) as pdf:
                 text = "".join([p.extract_text() for p in pdf.pages if p.extract_text()])
-                # 상호 및 세액 추출 로직
                 name_match = re.search(r"상\s*호\s*[:：]\s*([가-힣\w\s]+)\n", text)
                 biz_name = name_match.group(1).strip() if name_match else f.name.split('_')[0]
                 if biz_name not in final_reports: final_reports[biz_name] = {"vat": 0}
@@ -88,7 +99,6 @@ elif menu == "⚖️ 매출매입장 PDF & 안내문":
             df = pd.read_excel(ex)
             biz_name = ex.name.split('_')[0]
             if biz_name not in final_reports: final_reports[biz_name] = {"vat": 0}
-            # 매출/매입 합계 (간이 로직)
             try:
                 s_sum = to_int(df[df['구분'].astype(str).str.contains('매출', na=False)]['합계'].sum())
                 b_sum = to_int(df[df['구분'].astype(str).str.contains('매입', na=False)]['합계'].sum())
@@ -112,7 +122,6 @@ elif menu == "💳 카드별 개별 엑셀 변환":
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for file in uploaded_files:
-                # 메타정보 (연도, 업체명, 카드사)
                 fname = file.name
                 year = datetime.now().strftime('%Y')
                 company = "업체명"
@@ -123,19 +132,17 @@ elif menu == "💳 카드별 개별 엑셀 변환":
                 if '국민' in fname: brand = "국민"
                 elif '비씨' in fname or 'BC' in fname: brand = "비씨"
                 
-                # 데이터 처리
                 df_raw = pd.read_excel(file, header=None)
                 h_idx = 0
                 for i in range(min(40, len(df_raw))):
                     row_s = "".join([str(v) for v in df_raw.iloc[i].values])
-                    if any(k in row_s for k in ['카드번호', '이용일', '매출일']):
+                    if any(k in row_s for k in ['카드번호', '이용일', '매출일', '승인일']):
                         h_idx = i; break
                 
                 file.seek(0)
                 df = pd.read_excel(file, header=h_idx)
                 df.columns = [str(c).strip() for c in df.columns]
                 
-                # 컬럼 매핑
                 col_map = {'매출일자': ['이용일', '승인일', '매출일'], '카드번호': ['카드번호', '카드명'], 
                            '가맹점명': ['가맹점', '이용처'], '사업자번호': ['사업자', '등록번호'], '매출금액': ['금액', '합계', '이용금액']}
                 
@@ -150,7 +157,6 @@ elif menu == "💳 카드별 개별 엑셀 변환":
                 tmp['공급가액'] = (tmp['매출금액'] / 1.1).round(0).astype(int)
                 tmp['부가세'] = tmp['매출금액'] - tmp['공급가액']
                 
-                # 카드별 분리 저장
                 tmp['C_ID'] = tmp['카드번호'].astype(str).apply(lambda x: re.sub(r'\D', '', x)[-4:] if len(re.sub(r'\D', '', x)) >= 4 else "0000")
                 for cid in tmp['C_ID'].unique():
                     f_df = tmp[tmp['C_ID'] == cid][['카드번호', '매출일자', '사업자번호', '가맹점명', '매출금액', '공급가액', '부가세']]
@@ -159,4 +165,4 @@ elif menu == "💳 카드별 개별 엑셀 변환":
                     f_df.to_excel(buf, index=False)
                     zf.writestr(new_name, buf.getvalue())
         
-        st.download_button("📥 카드별 분리 파일(ZIP) 다운로드", zip_buffer.getvalue(), "카드정제.zip", use_container_width=True)
+        st.download_button("📥 카드별 분리 파일(ZIP) 다운로드", zip_buffer.getvalue(), f"{company}_카드분리.zip", use_container_width=True)
