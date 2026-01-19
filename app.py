@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import os
+import zipfile  # 압축 기능을 위한 라이브러리 추가
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -9,9 +10,8 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 변환 로직: 날짜 처리 강화] ---
+# --- [1. PDF 변환 로직 (기존 성공 양식 유지)] ---
 try:
-    # 폰트 경로를 유연하게 설정 (로컬 및 클라우드 공용)
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
         pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
@@ -74,7 +74,6 @@ def make_pdf_stream(data, title, biz_name, date_range):
         else:
             actual_item_count += 1
             c.drawString(45, cur_y, str(actual_item_count))
-            # 날짜 출력 형식 안정화
             raw_date = row.get('전표일자', '')
             date_str = str(raw_date)[:10] if pd.notna(raw_date) else ""
             c.drawString(85, cur_y, date_str)
@@ -91,12 +90,10 @@ def make_pdf_stream(data, title, biz_name, date_range):
     buffer.seek(0)
     return buffer
 
-# --- [2. 세션 상태 초기화] ---
+# --- [2. 메뉴 및 사이드바 설정] ---
 M0, M1, M2, M3 = "🏠 Home", "⚖️ 마감작업", "📁 매출매입장 PDF 변환", "💳 카드매입 수기입력건"
 if 'selected_menu' not in st.session_state: st.session_state.selected_menu = M0
-if 'daily_memo' not in st.session_state: st.session_state.daily_memo = ""
 
-# --- [3. 디자인 및 사이드바] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 with st.sidebar:
     st.markdown("### 📁 Menu")
@@ -104,12 +101,8 @@ with st.sidebar:
         if st.button(m, key=f"m_{m}", type="primary" if st.session_state.selected_menu == m else "secondary", use_container_width=True):
             st.session_state.selected_menu = m
             st.rerun()
-    for _ in range(10): st.write("")
-    st.divider()
-    memo = st.text_area("Memo", value=st.session_state.daily_memo, height=200, label_visibility="collapsed")
-    if st.button("💾 저장"): st.session_state.daily_memo = memo
 
-# --- [4. 메인 화면 - PDF 변환 (날짜 오류 수정본)] ---
+# --- [3. 메인 화면 - ZIP 일괄 다운로드 구현] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 
@@ -119,32 +112,55 @@ if curr == M2:
         df = pd.read_excel(f)
         biz_name = f.name.split(" ")[0]
         
-        # [해결] 날짜 범위 추출 오류 방지 로직
+        # 날짜 범위 추출 (에러 방지 강화)
         try:
-            # 전표일자 컬럼을 날짜 형식으로 강제 변환 (오류 데이터는 NaT 처리)
             temp_dates = pd.to_datetime(df['전표일자'], errors='coerce').dropna()
-            if not temp_dates.empty:
-                date_range = f"{temp_dates.min().strftime('%Y-%m-%d')} ~ {temp_dates.max().strftime('%Y-%m-%d')}"
-            else:
-                date_range = "기간 정보 없음"
+            date_range = f"{temp_dates.min().strftime('%Y-%m-%d')} ~ {temp_dates.max().strftime('%Y-%m-%d')}" if not temp_dates.empty else "기간 없음"
         except:
-            date_range = "날짜 형식 확인 필요"
+            date_range = "기간 정보 없음"
 
         type_col = next((c for c in ['구분', '유형'] if c in df.columns), None)
         if type_col:
-            st.success(f"업체명: {biz_name} / 기간: {date_range}")
-            cols = st.columns(2)
-            for i, g in enumerate(['매출', '매입']):
-                with cols[i]:
-                    st.subheader(f"📈 {g}장")
-                    target = df[df[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
-                    if not target.empty:
-                        st.dataframe(target, height=300)
-                        pdf_stream = make_pdf_stream(target, f"{g} 장", biz_name, date_range)
-                        st.download_button(f"📥 {g} PDF 다운로드", pdf_stream, file_name=f"{biz_name}_{g}장.pdf")
+            st.success(f"업체명: {biz_name} / 분석 완료")
+            
+            # 매출/매입 데이터 분리
+            sales_df = df[df[type_col].astype(str).str.contains('매출', na=False)].reset_index(drop=True)
+            purchase_df = df[df[type_col].astype(str).str.contains('매입', na=False)].reset_index(drop=True)
+
+            # 화면 표시
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("📈 매출장")
+                st.dataframe(sales_df, height=250)
+            with c2:
+                st.subheader("📉 매입장")
+                st.dataframe(purchase_df, height=250)
+
+            st.divider()
+
+            # --- [ZIP 생성 핵심 로직] ---
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                # 1. 매출장 PDF 생성 및 추가
+                if not sales_df.empty:
+                    s_pdf = make_pdf_stream(sales_df, "매출 장", biz_name, date_range)
+                    zip_file.writestr(f"{biz_name}_매출장.pdf", s_pdf.getvalue())
+                
+                # 2. 매입장 PDF 생성 및 추가
+                if not purchase_df.empty:
+                    p_pdf = make_pdf_stream(purchase_df, "매입 장", biz_name, date_range)
+                    zip_file.writestr(f"{biz_name}_매입장.pdf", p_pdf.getvalue())
+
+            # 다운로드 버튼
+            st.download_button(
+                label="🎁 매출/매입장 PDF 한 번에 다운로드 (ZIP)",
+                data=zip_buffer.getvalue(),
+                file_name=f"{biz_name}_매출매입장_일괄.zip",
+                mime="application/zip",
+                use_container_width=True
+            )
         else:
             st.error("'구분' 또는 '유형' 컬럼을 찾을 수 없습니다.")
 
 elif curr == M0:
-    st.subheader("🔗 바로가기")
-    # (기존 홈 화면 구성...)
+    st.info("Home 화면입니다. 사이드바 메뉴를 이용해 주세요.")
