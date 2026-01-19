@@ -1,138 +1,148 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from fpdf import FPDF
-import unicodedata
+import io
 import os
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 클래스: 성공했던 양식 및 폰트 설정] ---
-class SimplePDF(FPDF):
-    def __init__(self, title, biz):
-        super().__init__(orientation='L')
-        self.title_text = title
-        self.biz_name = biz
+# --- [1. 한글 폰트 등록] ---
+# Streamlit Cloud 환경에서도 동작하도록 malgun.ttf를 등록합니다.
+try:
+    pdfmetrics.registerFont(TTFont('MalgunGothic', "malgun.ttf"))
+    FONT_NAME = 'MalgunGothic'
+except:
+    FONT_NAME = 'Helvetica'
+
+# --- [2. 성공했던 PDF 생성 로직 (pdf_convert.py 기반)] ---
+def to_int(val):
+    try:
+        if pd.isna(val) or str(val).strip() == "": return 0
+        return int(float(str(val).replace(',', '')))
+    except:
+        return 0
+
+def make_pdf_stream(data, title, biz_name, date_range):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    rows_per_page = 26
+    actual_item_count = 0 
+    summary_keywords = ['합계', '월계', '분기', '반기', '누계']
+
+    for i in range(len(data)):
+        if i % rows_per_page == 0:
+            if i > 0: c.showPage()
+            p_num = (i // rows_per_page) + 1
+            
+            c.setFont(FONT_NAME, 20)
+            c.drawCentredString(width/2, height - 60, title)
+            c.setFont(FONT_NAME, 10)
+            c.drawString(50, height - 90, f"회사명 : {biz_name}")
+            c.drawString(50, height - 105, f"기  간 : {date_range}") 
+            c.drawRightString(width - 50, height - 90, f"페이지 : {p_num}")
+            
+            yh = 680 
+            c.setLineWidth(1.5)
+            c.line(40, yh + 15, 555, yh + 15)
+            c.setFont(FONT_NAME, 9)
+            c.drawString(45, yh, "번호")
+            c.drawString(90, yh, "일자")
+            c.drawString(180, yh, "거래처(적요)")
+            c.drawRightString(420, yh, "공급가액")
+            c.drawRightString(485, yh, "부가가치세")
+            c.drawRightString(550, yh, "합계")
+            c.setLineWidth(1.0)
+            c.line(40, yh - 8, 555, yh - 8)
+            y_start = yh - 28
         
-        font_path = "malgun.ttf"
-        if os.path.exists(font_path):
-            try:
-                self.add_font('Malgun', '', font_path)
-                self.font_name = 'Malgun'
-            except:
-                self.font_name = 'helvetica'
+        row = data.iloc[i]
+        cur_y = y_start - ((i % rows_per_page) * 23)
+        
+        # 요약 행 여부 확인
+        def check_summary(r):
+            if r is None: return False
+            t_no = str(r['번호']) if pd.notna(r['번호']) else ""
+            t_vendor = str(r['거래처']) if pd.notna(r['거래처']) else ""
+            txt = (t_no + t_vendor).replace(" ", "").replace("[", "").replace("]", "")
+            return any(k in txt for k in summary_keywords)
+
+        is_curr_summary = check_summary(row)
+        next_row = data.iloc[i+1] if i+1 < len(data) else None
+        is_next_summary = check_summary(next_row)
+        
+        c.setFont(FONT_NAME, 8.5)
+        
+        if is_curr_summary:
+            c.setFont(FONT_NAME, 9)
+            c.drawString(90, cur_y, str(row['거래처']) if pd.notna(row['거래처']) else str(row['번호']))
+            prev_row = data.iloc[i-1] if i > 0 else None
+            if not check_summary(prev_row):
+                c.setLineWidth(1.2)
+                c.line(40, cur_y + 16, 555, cur_y + 16)
+            if not is_next_summary:
+                c.setLineWidth(1.2)
+                c.line(40, cur_y - 7, 555, cur_y - 7)
         else:
-            self.font_name = 'helvetica'
-
-    def header(self):
-        self.set_font(self.font_name, '', 20)
-        title = unicodedata.normalize('NFC', self.title_text)
-        self.cell(0, 15, title, new_x="LMARGIN", new_y="NEXT", align='C')
+            actual_item_count += 1
+            c.drawString(45, cur_y, str(actual_item_count))
+            c.drawString(85, cur_y, str(row['전표일자']) if pd.notna(row['전표일자']) else "")
+            c.drawString(170, cur_y, str(row['거래처'])[:25] if pd.notna(row['거래처']) else "")
+            c.setLineWidth(0.3)
+            c.setStrokeColor(colors.lightgrey)
+            c.line(40, cur_y - 7, 555, cur_y - 7)
         
-        self.set_font(self.font_name, '', 11)
-        biz = unicodedata.normalize('NFC', f"업체명: {self.biz_name}")
-        date_str = f"출력일: {datetime.now().strftime('%Y-%m-%d')}"
-        self.cell(0, 8, biz, align='L')
-        self.set_x(-60)
-        self.cell(0, 8, date_str, new_x="LMARGIN", new_y="NEXT", align='R')
-        self.line(10, 38, 287, 38)
-        self.ln(5)
+        c.drawRightString(410, cur_y, f"{to_int(row['공급가액']):,}")
+        c.drawRightString(485, cur_y, f"{to_int(row['부가세']):,}")
+        c.drawRightString(550, cur_y, f"{to_int(row['합계']):,}")
+        c.setStrokeColor(colors.black)
 
-    def draw_table(self, df):
-        if df.empty: return
-        self.set_font(self.font_name, '', 9)
-        
-        # [성공했던 열 너비 분배]
-        total_w = 277
-        # 긴 항목(품명, 거래처)은 넓게, 나머지는 데이터 양에 맞춰 조절
-        col_widths = []
-        for col in df.columns:
-            if any(x in col for x in ['품명', '거래처', '적요']):
-                col_widths.append(75)
-            elif any(x in col for x in ['일자', '구분', '번호']):
-                col_widths.append(25)
-            else:
-                col_widths.append((total_w - 150 - 75) / (len(df.columns)-3) if len(df.columns) > 3 else 30)
+    c.save()
+    buffer.seek(0)
+    return buffer
 
-        # 헤더 (어두운 회색)
-        self.set_fill_color(50, 50, 50)
-        self.set_text_color(255, 255, 255)
-        for i, col in enumerate(df.columns):
-            txt = unicodedata.normalize('NFC', str(col))
-            self.cell(col_widths[i], 10, txt, border=1, align='C', fill=True)
-        self.ln()
-        
-        # 데이터 (불필요한 행은 이미 제거됨)
-        self.set_text_color(0, 0, 0)
-        for _, row in df.iterrows():
-            for i, val in enumerate(row):
-                align = 'R' if isinstance(val, (int, float)) else 'C'
-                display_val = f"{val:,.0f}" if isinstance(val, (int, float)) else str(val)
-                txt = unicodedata.normalize('NFC', display_val)
-                try:
-                    self.cell(col_widths[i], 8, txt, border=1, align=align)
-                except:
-                    self.cell(col_widths[i], 8, "?", border=1, align=align)
-            self.ln()
+# --- [3. 세션 및 사이드바 설정] ---
+M0, M1, M2, M3 = "🏠 Home", "⚖️ 마감작업", "📁 매출매입장 PDF 변환", "💳 카드매입 수기입력건"
+if 'menu' not in st.session_state: st.session_state.menu = M0
 
-# --- [2. 세션 및 메뉴 고정 (줄 위 4개)] ---
-M_LIST = ["🏠 Home", "⚖️ 마감작업", "📁 매출매입장 PDF 변환", "💳 카드매입 수기입력건"]
-if 'selected_menu' not in st.session_state:
-    st.session_state.selected_menu = M_LIST[0]
-
-st.set_page_config(page_title="세무 통합 시스템", layout="wide")
-st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] div.stButton > button {
-        width: 100%; border-radius: 6px; text-align: left !important;
-        padding-left: 15px !important; margin-bottom: -5px; border: 1px solid #ddd;
-        background-color: white; color: #444; height: 2.5rem;
-    }
-    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-        background-color: #f0f2f6 !important; color: #1f2937 !important;
-        border: 2px solid #9ca3af !important; font-weight: 600 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
+st.set_page_config(layout="wide")
 with st.sidebar:
     st.markdown("### 📂 Menu")
-    for m in M_LIST:
-        if st.button(m, key=f"btn_{m}", type="primary" if st.session_state.selected_menu == m else "secondary"):
-            st.session_state.selected_menu = m
+    for m in [M0, M1, M2, M3]:
+        if st.button(m, key=f"btn_{m}", type="primary" if st.session_state.menu == m else "secondary", use_container_width=True):
+            st.session_state.menu = m
             st.rerun()
     st.markdown("<div style='height: 150px;'></div>", unsafe_allow_html=True)
     st.divider()
-    st.markdown("### 📝 Memo")
-    st.text_area("Memo", height=200, label_visibility="collapsed", key="memo_val")
+    st.text_area("Memo", height=200, key="side_memo")
 
-# --- [3. 메인 로직: 행 필터링 및 PDF 생성] ---
-curr = st.session_state.selected_menu
+# --- [4. 메인 변환 기능 구현] ---
+curr = st.session_state.menu
 st.title(curr)
 
-if curr == M_LIST[2]:
-    up_file = st.file_uploader("📊 엑셀 파일 선택", type=['xlsx'])
-    if up_file:
-        df = pd.read_excel(up_file).fillna("")
-        biz_name = up_file.name.split(" ")[0]
+if curr == M2:
+    f = st.file_uploader("📊 엑셀 업로드", type=['xlsx'])
+    if f:
+        df = pd.read_excel(f)
+        biz_name = f.name.split(" ")[0]
         
-        # [중요] 불필요한 행 제거 (합계, 월계, 누계 등)
-        # 모든 컬럼을 검사해서 해당 키워드가 들어있는 행은 삭제합니다.
-        exclude_keywords = ['합 계', '월 계', '누 계', '합계', '월계', '누계', '[합 계]', '[월 계]']
-        mask = df.apply(lambda row: row.astype(str).str.contains('|'.join(exclude_keywords)).any(), axis=1)
-        df = df[~mask]
+        # 날짜 범위 추출
+        date_series = df['전표일자'].dropna().astype(str)
+        date_range = f"{date_series.min()} ~ {date_series.max()}" if not date_series.empty else "기간 없음"
 
-        type_col = next((c for c in ['구분', '유형', '매출매입'] if c in df.columns), None)
+        type_col = next((c for c in ['구분', '유형'] if c in df.columns), None)
         if type_col:
-            st.success(f"필터링 완료: {biz_name}")
+            st.success(f"데이터 분석 완료: {biz_name}")
             c1, c2 = st.columns(2)
-            for i, d_type in enumerate(['매출', '매입']):
+            for i, g in enumerate(['매출', '매입']):
                 with [c1, c2][i]:
-                    st.subheader(f"📈 {d_type} 내역")
-                    sub_df = df[df[type_col].astype(str).str.contains(d_type, na=False)]
-                    if not sub_df.empty:
-                        st.dataframe(sub_df, height=300)
-                        pdf = SimplePDF(f"{d_type}장", biz_name)
-                        pdf.add_page()
-                        pdf.draw_table(sub_df)
-                        st.download_button(f"📥 {d_type} PDF 다운로드", bytes(pdf.output()), file_name=f"{biz_name}_{d_type}장.pdf", key=f"dl_{i}")
+                    st.subheader(f"📈 {g}장")
+                    target = df[df[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                    if not target.empty:
+                        st.dataframe(target, height=300)
+                        pdf_data = make_pdf_stream(target, f"{g} 장", biz_name, date_range)
+                        st.download_button(f"📥 {g} PDF 다운로드", pdf_data, file_name=f"{biz_name}_{g}장.pdf")
         else:
-            st.error("'구분' 컬럼이 없습니다.")
+            st.error("'구분' 컬럼을 찾을 수 없습니다.")
