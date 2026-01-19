@@ -12,53 +12,56 @@ if 'daily_memo' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = "🏠 Home"
 
-# --- [2. 스타일 설정: 왼쪽 정렬 및 박스 크기 최적화] ---
+# --- [2. 스타일 설정: 너비 100% 및 왼쪽 정렬 강제] ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
 st.markdown("""
     <style>
-    /* 메인 컨테이너 정렬 */
-    .main .block-container { padding-top: 2rem; max-width: 95%; }
+    /* 메인 여백 최소화 */
+    .main .block-container { padding-top: 1.5rem; max-width: 98%; }
     
-    /* [바로가기/메뉴 버튼] 왼쪽 정렬 + 큰 박스 고정 */
+    /* 모든 버튼(메뉴, 링크)을 창 너비에 꽉 차게 + 왼쪽 정렬 */
     .stButton > button, .stLinkButton > a {
         width: 100% !important;
-        height: 3.5rem !important; 
+        height: 3.8rem !important; /* 높이도 더 시원하게 키움 */
         border-radius: 8px !important;
-        background-color: #ffffff !important;
+        background-color: #f8f9fa !important;
         color: #333 !important;
-        border: 1px solid #dcdcdc !important;
+        border: 1px solid #d1d5db !important;
         
-        /* 텍스트 왼쪽 정렬 설정 */
+        /* 텍스트 왼쪽 정렬 및 여유 있는 패딩 */
         display: flex !important;
         justify-content: flex-start !important; 
         align-items: center !important;
-        padding-left: 20px !important;
+        padding-left: 25px !important;
+        font-size: 17px !important;
+        font-weight: 500 !important;
         text-decoration: none !important;
     }
 
-    /* 사이드바 메뉴 버튼 (회색 배경 유지) */
-    div[data-testid="stSidebar"] .stButton > button {
-        background-color: #f8f9fa !important;
+    /* 사이드바 메뉴 전용 (선택 시 빨간 테두리) */
+    div[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        border: 2px solid #ff4b4b !important;
+        background-color: #ffffff !important;
     }
 
-    /* 카테고리 제목 스타일 */
-    .category-title {
-        font-size: 1.2rem;
-        font-weight: bold;
-        margin-top: 20px;
-        margin-bottom: 15px;
-        padding-left: 5px;
-        border-left: 5px solid #ff4b4b;
-    }
-
-    /* 메모 저장 버튼 (소형) */
+    /* 메모 저장 버튼만 예외적으로 작게 (우측 정렬) */
     .mini-save-area button {
-        width: 60px !important; 
-        height: 30px !important;
-        min-height: 30px !important;
+        width: 65px !important; 
+        height: 32px !important;
+        min-height: 32px !important;
+        font-size: 14px !important;
         padding: 0 !important;
         justify-content: center !important; 
+        background-color: white !important;
+    }
+
+    /* 카테고리 타이틀 스타일 */
+    .cat-header {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin: 25px 0 15px 0;
+        color: #1f2937;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -69,13 +72,13 @@ with st.sidebar:
     menus = ["🏠 Home", "⚖️ 마감작업", "💳 카드매입 수기입력건"]
     for m in menus:
         is_selected = (st.session_state.selected_menu == m)
-        if st.button(m, key=f"side_{m}", type="primary" if is_selected else "secondary", use_container_width=True):
+        if st.button(m, key=f"side_{m}", type="primary" if is_selected else "secondary"):
             st.session_state.selected_menu = m
             st.rerun()
     
-    st.markdown('<div style="border-top: 1px solid #eee; margin-top: 25px; padding-top: 20px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="border-top: 1px solid #eee; margin-top: 30px; padding-top: 20px;"></div>', unsafe_allow_html=True)
     st.markdown("#### 📝 Memo")
-    memo_val = st.text_area("memo", value=st.session_state.daily_memo, height=150, label_visibility="collapsed")
+    memo_val = st.text_area("memo", value=st.session_state.daily_memo, height=180, label_visibility="collapsed")
     
     st.markdown('<div class="mini-save-area" style="display:flex; justify-content:flex-end;">', unsafe_allow_html=True)
     if st.button("저장", key="memo_save"):
@@ -90,25 +93,25 @@ if current == "🏠 Home":
     st.title("🏠 Home")
     st.divider()
     
-    # [새로운 카테고리: 바로가기]
-    st.markdown('<div class="category-title">🔗 바로가기</div>', unsafe_allow_html=True)
+    # [바로가기 카테고리]
+    st.markdown('<p class="cat-header">🔗 바로가기</p>', unsafe_allow_html=True)
     
-    # 상단 2개
-    t_col1, t_col2, _ = st.columns([1, 1, 2])
-    with t_col1: st.link_button("위하고", "https://www.wehago.com")
-    with t_col2: st.link_button("홈택스", "https://www.hometax.go.kr")
+    # 상단 2개 (위하고, 홈택스) - 너비를 꽉 채우기 위해 2분할
+    col_t1, col_t2 = st.columns(2)
+    with col_t1: st.link_button("위하고", "https://www.wehago.com")
+    with col_t2: st.link_button("홈택스", "https://www.hometax.go.kr")
     
     st.write("") # 간격
     
-    # 하단 4개
-    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
-    with b_col1: st.link_button("신고리스트", "https://docs.google.com/...")
-    with b_col2: st.link_button("부가세 상반기자료", "https://drive.google.com/...")
-    with b_col3: st.link_button("부가세 하반기자료", "https://drive.google.com/...")
-    with b_col4: st.link_button("카드매입자료", "https://drive.google.com/...")
+    # 하단 4개 - 너비를 위해 2개씩 두 줄로 배치하거나 4분할
+    col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+    with col_b1: st.link_button("신고리스트", "https://docs.google.com/...")
+    with col_b2: st.link_button("부가세 상반기자료", "https://drive.google.com/...")
+    with col_b3: st.link_button("부가세 하반기자료", "https://drive.google.com/...")
+    with col_b4: st.link_button("카드매입자료", "https://drive.google.com/...")
     
     st.divider()
-    st.markdown('<div class="category-title">⌨️ 차변 계정 단축키 관리</div>', unsafe_allow_html=True)
+    st.markdown('<p class="cat-header">⌨️ 차변 계정 단축키 관리</p>', unsafe_allow_html=True)
     df = pd.DataFrame(st.session_state.account_data)
     st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
