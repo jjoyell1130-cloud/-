@@ -127,4 +127,19 @@ elif selected_menu == st.session_state.config["menu_1"]:
                     if v_match:
                         val = to_int(v_match.group(1))
                         reports[biz]["세액"] = abs(val)
-                        reports[biz]["결과"] = "환급" if "환급" in txt or val < 0
+                        reports[biz]["결과"] = "환급" if "환급" in txt or val < 0 else "납부"
+            except: pass
+        
+        if reports:
+            st.subheader("📩 생성된 안내문")
+            for biz, data in reports.items():
+                msg = st.session_state.config["prompt_template"].format(
+                    업체명=data['업체명'], 매출액=f"{data['매출']:,}", 매입액=f"{data['매입']:,}", 
+                    결과=data['결과'], 세액=f"{data['세액']:,}"
+                )
+                st.text_area(f"🏢 {biz} 안내문", msg, height=250, key=f"res_{biz}")
+                st.divider()
+
+elif selected_menu == st.session_state.config["menu_2"]:
+    st.info("카드 변환 메뉴입니다. 엑셀 파일을 업로드해주세요.")
+    st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
