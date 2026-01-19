@@ -9,15 +9,14 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. PDF 및 데이터 처리 로직] ---
-def load_font():
+# --- [1. PDF 변환 로직] ---
+try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
         pdfmetrics.registerFont(TTFont('MalgunGothic', font_path))
-        return 'MalgunGothic'
-    return 'Helvetica'
-
-FONT_NAME = load_font()
+        FONT_NAME = 'MalgunGothic'
+    else: FONT_NAME = 'Helvetica'
+except: FONT_NAME = 'Helvetica'
 
 def to_int(val):
     try:
@@ -54,14 +53,11 @@ def make_pdf_stream(data, title, biz_name, date_range):
         
         row = data.iloc[i]
         cur_y = y_start - ((i % rows_per_page) * 23)
-        
         def check_summary(r):
             txt = (str(r.get('번호', '')) + str(r.get('거래처', ''))).replace(" ", "")
             return any(k in txt for k in summary_keywords)
-
         is_curr_summary = check_summary(row)
         c.setFont(FONT_NAME, 8.5)
-        
         if is_curr_summary:
             c.setFont(FONT_NAME, 9)
             c.drawString(90, cur_y, str(row.get('거래처', row.get('번호', ''))))
@@ -74,27 +70,30 @@ def make_pdf_stream(data, title, biz_name, date_range):
             c.drawString(85, cur_y, str(raw_date)[:10] if pd.notna(raw_date) else "")
             c.drawString(170, cur_y, str(row.get('거래처', ''))[:25])
             c.setLineWidth(0.3); c.setStrokeColor(colors.lightgrey); c.line(40, cur_y - 7, 555, cur_y - 7)
-        
         c.drawRightString(410, cur_y, f"{to_int(row.get('공급가액', 0)):,}")
         c.drawRightString(485, cur_y, f"{to_int(row.get('부가세', 0)):,}")
         c.drawRightString(550, cur_y, f"{to_int(row.get('합계', 0)):,}")
         c.setStrokeColor(colors.black)
-
     c.save()
     buffer.seek(0)
     return buffer
 
-# --- [2. UI 및 세션 관리] ---
+# --- [2. 세션 및 설정] ---
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", 
-        "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건"
+        "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건",
+        "sub_menu3": "카드사 엑셀을 업로드하면 위하고 양식(공급가/부가세 분리)으로 변환 후 ZIP으로 다운로드합니다."
     }
 if 'selected_menu' not in st.session_state: st.session_state.selected_menu = st.session_state.config["menu_0"]
 
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
+st.markdown("""<style>
+    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
+    section[data-testid="stSidebar"] div.stButton > button { width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important; padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444; }
+    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] { background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important; }
+    </style>""", unsafe_allow_html=True)
 
-# 사이드바 메뉴 구성
 with st.sidebar:
     st.markdown("### 📁 Menu")
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
@@ -103,51 +102,44 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메뉴별 기능 구현] ---
+# --- [3. 메뉴별 상세 기능] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 
 if curr == st.session_state.config["menu_3"]:
-    st.markdown("<p style='color: #666;'>카드사별 엑셀 파일을 업로드하시면 압축(ZIP) 파일 형태로 변환하여 제공합니다.</p>", unsafe_allow_html=True)
+    st.info(st.session_state.config["sub_menu3"])
     card_f = st.file_uploader("💳 카드사 엑셀 업로드", type=['xlsx'], key="card_up")
     
     if card_f:
-        with st.status("🚀 파일을 변환 중입니다...", expanded=True) as status:
-            try:
-                # 데이터 가공 (예시 로직: 실제 위하고 양식 변환 코드가 들어가는 부분)
-                df = pd.read_excel(card_f)
-                biz_name = card_f.name.split("_")[0]
-                
-                # 가공된 엑셀 생성
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False, sheet_name='위하고_수기입력')
-                processed_excel = output.getvalue()
-                
-                # 압축 파일 생성
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-                    zf.writestr(f"위하고_수기입력_{card_f.name}", processed_excel)
-                
-                status.update(label="✅ 변환 완료!", state="complete", expanded=False)
-                
-                # 압축 파일 다운로드 버튼 (중앙 배치 스타일)
-                st.download_button(
-                    label="🎁 변환된 파일 일괄 다운로드 (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"{biz_name}_카드수기입력_변환.zip",
-                    mime="application/zip",
-                    use_container_width=True
-                )
-            except Exception as e:
-                status.update(label="❌ 변환 실패", state="error")
-                st.error(f"오류 내용: {e}")
+        df = pd.read_excel(card_f)
+        # 위하고 양식 변환 핵심 (공급가/부가세 산출)
+        # 보통 '이용금액' 또는 '금액' 컬럼을 기준으로 1.1 나누기 처리
+        amt_col = next((c for c in df.columns if '금액' in c or '이용금액' in c or '합계' in c), None)
+        
+        if amt_col:
+            df['합계'] = df[amt_col].apply(to_int)
+            df['공급가액'] = (df['합계'] / 1.1).round(0).astype(int)
+            df['부가세'] = df['합계'] - df['공급가액']
+            
+            # ZIP 생성
+            zip_buf = io.BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                excel_out = io.BytesIO()
+                with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, index=False, sheet_name='위하고_수기입력용')
+                zf.writestr(f"위하고_변환_{card_f.name}", excel_out.getvalue())
+            
+            st.success("✅ 위하고 업로드용 변환이 완료되었습니다.")
+            st.download_button("📥 위하고 변환파일(ZIP) 다운로드", zip_buf.getvalue(), file_name=f"WEHAGO_{card_f.name.split('.')[0]}.zip", use_container_width=True)
+        else:
+            st.error("엑셀에서 '금액' 관련 컬럼을 찾을 수 없습니다. 컬럼명을 확인해주세요.")
 
 elif curr == st.session_state.config["menu_2"]:
-    # (매출매입장 PDF 변환 로직 - 기존과 동일하게 ZIP 적용)
-    f = st.file_uploader("📊 엑셀 파일 업로드", type=['xlsx'], key="pdf_conv")
+    # 매출매입장 PDF 변환 로직 (ZIP 적용)
+    f = st.file_uploader("📊 매출매입장 엑셀 업로드", type=['xlsx'])
     if f:
         df = pd.read_excel(f)
         biz_name = f.name.split(" ")[0]
-        # 날짜 추출 및 ZIP 생성 로직...
-        # (중복 방지를 위해 생략하나 위와 동일한 ZIP 다운로드 구조 적용)
+        # (중략된 PDF 생성 로직 동일하게 적용 가능)
+        st.write(f"{biz_name} 분석 중...")
+        # ... (생략된 ZIP 생성 로직)
