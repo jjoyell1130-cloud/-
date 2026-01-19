@@ -2,35 +2,23 @@ import streamlit as st
 import pandas as pd
 import io
 
-# --- [0. 더미 변환 함수 정의] ---
-# 실제 변환 로직을 이 함수 내부에 작성하세요.
-def convert_card_data(uploaded_files):
-    """카드사 엑셀 -> 위하고 양식 변환"""
-    # 예시: 여러 파일을 하나로 합치거나 컬럼명을 변경하는 로직
-    combined_df = pd.DataFrame()
-    for file in uploaded_files:
-        df = pd.read_excel(file)
-        # TODO: 위하고 양식에 맞게 df 수정 로직 추가
-        combined_df = pd.concat([combined_df, df])
-    
-    # 엑셀 파일로 변환 (바이트 스트림)
+# --- [0. 처리 로직 함수] (내용물만 추가, 기존 디자인에 영향 없음) ---
+def process_card_conversion(files):
+    # 여기에 실제 위하고 변환 로직을 넣으시면 됩니다.
+    combined_df = pd.concat([pd.read_excel(f) for f in files])
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        combined_df.to_excel(writer, index=False, sheet_name='Sheet1')
+        combined_df.to_excel(writer, index=False)
     return output.getvalue()
 
-def process_vat_report(pdf_files, excel_files):
-    """국세청 PDF/엑셀 분석 -> 안내문 및 결과 파일 생성"""
-    # TODO: 데이터 분석 로직 추가
-    summary_text = "분석된 결과 요약 메시지입니다."
-    
-    # 예시 결과 파일 생성
+def process_vat_files(pdfs, excels):
+    # 여기에 PDF 분석 및 안내문 생성 로직을 넣으시면 됩니다.
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        pd.DataFrame([{"내용": "분석완료"}]).to_excel(writer, index=False)
-    return summary_text, output.getvalue()
+        pd.DataFrame([{"상태": "분석완료"}]).to_excel(writer, index=False)
+    return "안내문이 생성되었습니다.", output.getvalue()
 
-# --- [1. 세션 상태 및 설정 초기화] (기존 코드 유지) ---
+# --- [1. 세션 상태 및 설정 초기화] (사용자 내용 그대로 유지) ---
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", 
@@ -38,7 +26,21 @@ if 'config' not in st.session_state:
         "menu_2": "💳 카드매입 수기입력건",
         "sub_menu1": "국세청 PDF와 매출매입장 엑셀을 업로드하면 안내문이 자동 작성됩니다.",
         "sub_menu2": "카드사별 엑셀 파일을 업로드하시면, 위하고(WEHAGO) 수기입력 양식에 맞춘 전용 파일로 즉시 변환됩니다.",
-        "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}\n감기 조심하시고 건강이 최고인거 아시죠? ^.<\n\n부가세 신고 마무리되어 전체 자료 전달드립니다.\n\n=첨부파일=\n-부가세 신고서\n-매출장: {매출액}원\n-매입장: {매입액}원\n-접수증 > {결과}: {세액}원\n\n☆★{결과}예정 8월 말 정도\n\n혹 확인 중에 변동사항이 있거나 궁금증이 생기시면 꼭 연락주세요!\n25일 까지는 수정이 가능합니다!"""
+        "prompt_template": """*{업체명} 부가세 신고현황☆★{결과}
+감기 조심하시고 건강이 최고인거 아시죠? ^.<
+
+부가세 신고 마무리되어 전체 자료 전달드립니다.
+
+=첨부파일=
+-부가세 신고서
+-매출장: {매출액}원
+-매입장: {매입액}원
+-접수증 > {결과}: {세액}원
+
+☆★{결과}예정 8월 말 정도
+
+혹 확인 중에 변동사항이 있거나 궁금증이 생기시면 꼭 연락주세요!
+25일 까지는 수정이 가능합니다!"""
     }
 
 if 'daily_memo' not in st.session_state: st.session_state.daily_memo = ""
@@ -51,81 +53,99 @@ if 'link_group_2' not in st.session_state:
         {"name": "💳 카드매입자료", "url": "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe"}
     ]
 if 'account_data' not in st.session_state:
-    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"}] # 간소화
+    st.session_state.account_data = [{"단축키": "822", "거래처": "유류대", "계정명": "차량유지비", "분류": "공제유무확인후 분류"}, {"단축키": "812", "거래처": "편의점", "계정명": "여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "830", "거래처": "다이소", "계정명": "소모품비", "분류": "매입"}, {"단축키": "811", "거래처": "식당", "계정명": "복리후생비", "분류": "공제유무확인후 분류"}, {"단축키": "146", "거래처": "거래처", "계정명": "상품", "분류": "매입"}, {"단축키": "830", "거래처": "홈쇼핑, 인터넷구매", "계정명": "소모품비", "분류": "매입"}, {"단축키": "822", "거래처": "주차장, 적은금액세금", "계정명": "차량유지비", "분류": "일반"}, {"단축키": "-", "거래처": "휴게소", "계정명": "차량/여비교통비", "분류": "공제유무확인후 분류"}, {"단축키": "-", "거래처": "전기요금", "계정명": "전력비", "분류": "매입"}, {"단축키": "-", "거래처": "수도요금", "계정명": "수도광열비", "분류": "일반"}, {"단축키": "814", "거래처": "통신비", "계정명": "통신비", "분류": "매입"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "세금과공과", "분류": "일반"}, {"단축키": "830", "거래처": "약국", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "모텔", "계정명": "출장비/여비교통비", "분류": "일반"}, {"단축키": "831", "거래처": "캡스, 보안, 홈페이지", "계정명": "지급수수료", "분류": "매입"}, {"단축키": "-", "거래처": "아울렛(작업복)", "계정명": "소모품비", "분류": "매입"}, {"단축키": "820", "거래처": "컴퓨터 AS", "계정명": "수선비", "분류": "매입"}, {"단축키": "830", "거래처": "결제대행업체", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "신용카드 알림", "계정명": "지급수수료", "분류": "일반"}, {"단축키": "-", "거래처": "휴대폰 소액결제", "계정명": "소모품비", "분류": "일반"}, {"단축키": "146", "거래처": "매입 항목", "계정명": "상품", "분류": "매입"}, {"단축키": "-", "거래처": "병원", "계정명": "복리후생비", "분류": "일반"}, {"단축키": "-", "거래처": "금융결제원", "계정명": "소모품비", "분류": "일반"}, {"단축키": "-", "거래처": "로카모빌리티", "계정명": "소모품비", "분류": "일반"}, {"단축키": "831", "거래처": "소프트웨어 개발/공급", "계정명": "지급수수료", "분류": "지급수수료"}]
 
-# --- [2. 스타일 및 사이드바] (기존 코드 유지) ---
+# --- [2. 스타일 설정] (사용자 디자인 그대로 유지) ---
 st.set_page_config(page_title="세무 통합 시스템", layout="wide")
 
+st.markdown("""
+    <style>
+    .main .block-container { padding-top: 1.5rem; max-width: 95%; margin-left: 0 !important; text-align: left !important; }
+    h1, h2, h3, h4, h5, h6, p, span, label, div { text-align: left !important; justify-content: flex-start !important; }
+    
+    section[data-testid="stSidebar"] div.stButton > button {
+        width: 100%; border-radius: 6px; height: 2.2rem; font-size: 14px; text-align: left !important;
+        padding-left: 15px !important; margin-bottom: -10px; border: 1px solid #ddd; background-color: white; color: #444;
+    }
+    section[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+        background-color: #f0f2f6 !important; color: #1f2937 !important; border: 2px solid #9ca3af !important; font-weight: 600 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- [사이드바 구성] (사용자 로직 유지) ---
 with st.sidebar:
     st.markdown("### 📁 Menu")
     menu_items = [st.session_state.config["menu_0"], st.session_state.config["menu_1"], st.session_state.config["menu_2"]]
     for m_name in menu_items:
-        if st.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if st.session_state.selected_menu == m_name else "secondary"):
+        is_selected = (st.session_state.selected_menu == m_name)
+        if st.button(m_name, key=f"m_btn_{m_name}", use_container_width=True, type="primary" if is_selected else "secondary"):
             st.session_state.selected_menu = m_name
             st.rerun()
+
+    for _ in range(15): st.write("")
+    st.divider()
+    st.markdown("#### 📝 Memo")
+    side_memo = st.text_area("Memo Content", value=st.session_state.daily_memo, height=200, placeholder="여기에 메모를 입력하세요...", label_visibility="collapsed", key="memo_input_area")
+    if st.button("💾 저장", use_container_width=True, key="memo_save_btn"):
+        st.session_state.daily_memo = side_memo
+        st.success("저장되었습니다.")
 
 # --- [3. 메인 화면 출력] ---
 current_menu = st.session_state.selected_menu
 st.title(current_menu)
 
-# --- [4. 메뉴별 상세 기능 수정본] ---
+if current_menu != st.session_state.config["menu_0"]:
+    sub_text = st.session_state.config["sub_menu1"] if current_menu == st.session_state.config["menu_1"] else st.session_state.config["sub_menu2"]
+    st.markdown(f"<p style='color: #666; font-size: 15px;'>{sub_text}</p>", unsafe_allow_html=True)
 
-# 1) 홈 화면
+st.divider()
+
+# --- [4. 메뉴별 상세 기능] ---
 if current_menu == st.session_state.config["menu_0"]:
+    # (Home 내용은 사용자 기존 코드와 동일)
     st.subheader("🔗 바로가기")
-    # ... (기존 링크 및 단축키 테이블 코드 동일)
+    c1, c2 = st.columns(2)
+    with c1: st.link_button("WEHAGO (위하고)", "https://www.wehago.com/#/main", use_container_width=True)
+    with c2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    st.write("")
+    c3, c4, c5, c6 = st.columns(4)
+    links = st.session_state.link_group_2
+    with c3: st.link_button(links[0]["name"], links[0]["url"], use_container_width=True)
+    with c4: st.link_button(links[1]["name"], links[1]["url"], use_container_width=True)
+    with c5: st.link_button(links[2]["name"], links[2]["url"], use_container_width=True)
+    with c6: st.link_button(links[3]["name"], links[3]["url"], use_container_width=True)
+    st.divider()
+    st.subheader("⌨️ 차변계정 단축키")
+    df_acc = pd.DataFrame(st.session_state.account_data)
+    edited_df = st.data_editor(df_acc, num_rows="dynamic", use_container_width=True, key="acc_editor")
+    if st.button("💾 리스트 저장", key="acc_save_btn"):
+        st.session_state.account_data = edited_df.to_dict('records')
+        st.success("데이터가 저장되었습니다.")
 
-# 2) 마감작업 (PDF/엑셀 -> 안내문 및 변환)
 elif current_menu == st.session_state.config["menu_1"]:
-    st.info(st.session_state.config["sub_menu1"])
-    
-    with st.expander("💬 카톡 안내문 양식 편집"):
-        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=150)
-        if st.button("💾 양식 저장"):
+    with st.expander("💬 카톡 안내문 양식 편집", expanded=True):
+        u_template = st.text_area("양식 수정", value=st.session_state.config["prompt_template"], height=200, key="template_input")
+        if st.button("💾 안내문 양식 저장", key="template_save_btn"):
             st.session_state.config["prompt_template"] = u_template
             st.success("저장되었습니다.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        pdf_files = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True)
-    with col2:
-        excel_files = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True)
-
-    if pdf_files and excel_files:
-        if st.button("🚀 데이터 분석 및 결과 생성", use_container_width=True):
-            with st.spinner("파일을 분석 중입니다..."):
-                # 변환 함수 실행
-                summary, result_file = process_vat_report(pdf_files, excel_files)
-                
-                st.divider()
-                st.subheader("✅ 분석 결과")
-                st.text_area("생성된 안내문", value=summary, height=200)
-                
-                st.download_button(
-                    label="📥 분석 결과 엑셀 다운로드",
-                    data=result_file,
-                    file_name="부가세_신고_분석결과.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-
-# 3) 카드매입 수기입력건 (카드사 엑셀 -> 위하고 양식)
-elif current_menu == st.session_state.config["menu_2"]:
-    st.info(st.session_state.config["sub_menu2"])
+    st.divider()
+    # --- [파일 업로드 및 처리 버튼] ---
+    pdf_files = st.file_uploader("📄 1. 국세청 PDF 업로드", type=['pdf'], accept_multiple_files=True, key="pdf_uploader")
+    excel_files = st.file_uploader("📊 2. 매출매입장 엑셀 업로드", type=['xlsx'], accept_multiple_files=True, key="excel_uploader")
     
-    card_files = st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True)
+    if pdf_files and excel_files:
+        if st.button("📂 분석 및 결과 생성", use_container_width=True):
+            summary, result_xlsx = process_vat_files(pdf_files, excel_files)
+            st.text_area("생성된 안내문", value=summary, height=100)
+            st.download_button("📥 결과 파일 다운로드", data=result_xlsx, file_name="마감작업_결과.xlsx", use_container_width=True)
 
+elif current_menu == st.session_state.config["menu_2"]:
+    # --- [파일 업로드 및 변환 버튼] ---
+    card_files = st.file_uploader("💳 카드사 엑셀 파일 업로드", type=['xlsx'], accept_multiple_files=True, key="card_uploader")
+    
     if card_files:
-        if st.button("🔄 위하고 양식으로 변환하기", use_container_width=True):
-            with st.spinner("양식을 변환 중입니다..."):
-                # 변환 함수 실행
-                converted_data = convert_card_data(card_files)
-                
-                st.success("변환이 완료되었습니다!")
-                st.download_button(
-                    label="📥 위하고 수기입력용 파일 다운로드",
-                    data=converted_data,
-                    file_name="WEHAGO_수기입력_변환파일.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+        if st.button("🔄 위하고 양식으로 변환", use_container_width=True):
+            converted_xlsx = process_card_conversion(card_files)
+            st.success("변환이 완료되었습니다.")
+            st.download_button("📥 변환된 파일 다운로드", data=converted_xlsx, file_name="위하고_수기입력용.xlsx", use_container_width=True)
