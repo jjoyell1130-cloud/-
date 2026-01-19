@@ -28,7 +28,6 @@ def to_int(val):
     except: return 0
 
 def make_pdf_buffer(data, title, date_range):
-    """파일 저장 대신 메모리(Buffer)에 PDF를 생성하여 바로 다운로드 가능하게 함"""
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
@@ -94,8 +93,8 @@ def make_pdf_buffer(data, title, date_range):
 # --- Streamlit UI ---
 st.set_page_config(page_title="세무비서 자동화", layout="centered")
 
-# 사이드바: 엑셀 기반 PDF 장부 생성
-st.sidebar.title("📁 장부 PDF 변환")
+# 사이드바: 매출매입장 PDF 생성 (이름 변경됨)
+st.sidebar.title("📑 매출매입장 PDF 생성")
 uploaded_excel = st.sidebar.file_uploader("엑셀 파일을 업로드하세요", type=['xlsx'])
 
 if uploaded_excel:
@@ -119,7 +118,7 @@ if uploaded_excel:
                         file_name=f"에덴인테리어_{g}장.pdf",
                         mime="application/pdf"
                     )
-            st.sidebar.success("✅ 변환 성공! 위 버튼을 눌러 다운로드하세요.")
+            st.sidebar.success("✅ 변환 완료!")
         except Exception as e:
             st.sidebar.error(f"❌ 오류: {e}")
 
@@ -128,7 +127,6 @@ st.title("📊 부가세 신고 안내문 생성기")
 uploaded_files = st.file_uploader("위하고 PDF 파일들을 선택하세요", accept_multiple_files=True, type=['pdf'])
 
 if uploaded_files:
-    # (기존 안내문 생성 로직 동일)
     first_file_name = uploaded_files[0].name
     biz_name = first_file_name.split('_')[0] if '_' in first_file_name else "알 수 없음"
     report_data = {"매출": "0", "매입": "0", "환급": "0"}
@@ -160,4 +158,4 @@ if uploaded_files:
     st.success(f"✅ {biz_name} 업체 분석 완료!")
     st.text_area("내용을 복사해서 카톡에 붙여넣으세요", final_text, height=200)
 else:
-    st.info("왼쪽 사이드바에서 엑셀을 PDF로 바꾸거나, 여기에 PDF를 올려 안내문을 만드세요.")
+    st.info("왼쪽 사이드바에서 엑셀을 업로드하여 PDF 장부를 생성하거나, 여기에 PDF를 올려 안내문을 만드세요.")
