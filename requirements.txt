@@ -1,4 +1,7 @@
+streamlit
 pandas
-reportlab
-pdfplumber
 openpyxl
+xlsxwriter
+pdfplumber
+reportlab
+xlrd>=2.0.1
