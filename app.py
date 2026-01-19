@@ -6,13 +6,13 @@ import re
 st.set_page_config(page_title="세무비서 자동화", layout="wide")
 st.title("📊 부가세 신고 안내문 생성기")
 
-# 2. 사이드바 설정
+# 2. 사이드바 설정 (인사말/마무리말)
 st.sidebar.header("📝 문구 설정")
-greeting_text = st.sidebar.text_area("인사말", value="*2025 {biz_name}-상반기 부가세 신고현황☆★환급\n더위 조심하세요! ^.<")
-closing_text = st.sidebar.text_area("마무릿말", value="궁금한 점은 연락주세요!\n25일까지 수정 가능합니다.")
+greeting_text = st.sidebar.text_area("인사말", value="*2025 {biz_name}-상반기 부가세 신고현황☆★환급\n더위 조심하시고 건강이 최고인거 아시죠? ^.<")
+closing_text = st.sidebar.text_area("마무리말", value="혹 확인 중에 변동사항이 있거나 궁금증이 생기시면 꼭 연락주세요!\n25일 까지는 수정이 가능합니다!")
 
 def get_money(text, key):
-    """금액 추출용 간단 함수"""
+    """특정 키워드 라인에서 금액 추출"""
     for line in text.split('\n'):
         if key in line:
             nums = re.findall(r'\d{1,3}(?:,\d{3})+', line)
@@ -24,9 +24,9 @@ files = st.file_uploader("PDF 파일을 올려주세요", accept_multiple_files=
 
 if files:
     names = [f.name for f in files]
-    st.info(f"📁 총 {len(names)}개 로드됨")
+    st.info(f"📁 총 {len(names)}개의 파일이 로드되었습니다.")
     
-    # 업체명 추출
+    # 업체명 추출 (리베르떼_... 형식)
     biz_name = names[0].split('_')[0] if '_' in names[0] else "알 수 없음"
     m_sales, m_buy, m_refund = "0", "0", "0"
 
@@ -37,7 +37,6 @@ if files:
                 tmp = pg.extract_text()
                 if tmp: txt += tmp
             
-            # 파일 종류별 데이터 추출
             nm = f.name
             if "매출장" in nm:
                 m_sales = get_money(txt, "누계")
@@ -47,12 +46,27 @@ if files:
                 res = get_money(txt, "차가감납부할세액")
                 if res != "0": m_refund = res
 
-    # 4. 결과 조립
+    # 4. 결과 조립 (예쁘게 다듬기)
     hi = greeting_text.replace("{biz_name}", biz_name)
-    res_text = f"{hi}\n\n매출장: {m_sales}원\n매입장: {m_buy}원\n환급액: {m_refund}원\n\n{closing_text}"
+    
+    final_msg = f"{hi}\n\n"
+    final_msg += "부가세 신고 마무리되어 전체 자료 전달드립니다.\n\n"
+    final_msg += "=첨부파일=\n"
+    final_msg += "-부가세 신고서\n"
+    final_msg += f"-매출장: {m_sales}원\n"
+    final_msg += f"-매입장: {m_buy}원\n"
+    final_msg += f"-접수증 > 환급: {m_refund}원\n\n"
+    final_msg += "☆★환급예정 8월 말 정도\n\n"
+    final_msg += closing_text
 
-    st.success(f"✅ {biz_name} 분석 완료")
+    st.success(f"✅ {biz_name} 분석 완료!")
     
     c1, c2 = st.columns([1.5, 1])
     with c1:
-        st.subheader
+        st.subheader("📋 최종 안내문 (카톡용)")
+        st.text_area("내용을 복사해서 사용하세요", final_msg, height=450)
+    with c2:
+        st.subheader("📁 업로드 확인")
+        for n in names: st.write(f"✔️ {n}")
+else:
+    st.info("위하고에서 받은 PDF 파일들을 올려주세요.")
