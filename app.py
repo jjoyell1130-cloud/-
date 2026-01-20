@@ -187,8 +187,7 @@ elif curr == st.session_state.config["menu_2"]:
 
 # --- [Menu 3: 카드매입 수기입력건] --- (이 부분이 핵심 수정 내용입니다)
 elif curr == "💳 카드매입 수기입력건":
-    st.title("💳 카드매입 수기입력건")
-    st.info("신한카드(거래일/가맹점명)와 삼성카드(이용일/업종) 데이터를 모두 자동 인식합니다.")
+    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     
     card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3")
     
