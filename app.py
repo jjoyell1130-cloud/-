@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진 및 유틸리티] ---
+# --- [1. 기초 엔진] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -26,6 +26,7 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
+        # 숫자 외 문자(따옴표, 콤마 등) 모두 제거
         s = re.sub(r'[^\d.-]', '', str(val))
         return int(float(s))
     except: return 0
@@ -186,9 +187,10 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
+# --- [Menu 3: 카드매입 수기입력건] --- (신한카드 오류 수정본)
 elif curr == st.session_state.config["menu_3"]:
-    st.info("신한카드 CSV의 줄바꿈 헤더를 자동으로 감지하여 변환합니다.")
-    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_final")
+    st.info("카드내역서 엑셀/CSV를 업로드하시면 위하고 양식으로 자동 변환합니다.")
+    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_fixed")
     
     if card_up:
         raw_fn = os.path.splitext(card_up.name)[0]
@@ -201,39 +203,39 @@ elif curr == st.session_state.config["menu_3"]:
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # 신한카드 전용: 줄바꿈 제거 및 공백 제거 후 헤더 탐색
+            # 신한카드 특화: 줄바꿈 제거 후 헤더 위치 찾기
             header_idx = None
             for i, row in raw_df.iterrows():
-                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace(" ", "")
-                if ("가맹점명" in row_str or "거래처" in row_str) and ("이용금액" in row_str or "합계" in row_str):
-                    header_idx = i
-                    break
+                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace(" ", "").replace('"', '')
+                if any(k in row_str for k in ['가맹점', '거래처', '상호']) and any(k in row_str for k in ['이용금액', '합계', '금액']):
+                    header_idx = i; break
             
             if header_idx is not None:
-                # 헤더 세척 (줄바꿈 \n 제거)
-                cols = [str(c).replace("\n", "").replace(" ", "") for c in raw_df.iloc[header_idx].values]
+                # 헤더 정제 (신한카드의 줄바꿈 제목 대응)
+                cols = [str(c).replace("\n", "").replace(" ", "").replace('"', '') for c in raw_df.iloc[header_idx].values]
                 df = raw_df.iloc[header_idx+1:].copy()
                 df.columns = cols
                 df = df.dropna(how='all', axis=0)
 
-                # 신한/삼성 통합 매칭 키워드
-                d_col = next((c for c in df.columns if any(k in c for k in ['거래일', '이용일', '일자'])), None)
-                p_col = next((c for c in df.columns if any(k in c for k in ['가맹점명', '거래처', '상호', '이용처'])), None)
-                a_col = next((c for c in df.columns if any(k in c for k in ['이용금액', '합계', '승인금액'])), None)
-                s_col = next((c for c in df.columns if any(k in c for k in ['공급가액', '공급가'])), None)
-                t_col = next((c for c in df.columns if any(k in c for k in ['부가세', '부가가치세'])), None)
-                n_col = next((c for c in df.columns if any(k in c for k in ['이용카드', '카드번호', '번호'])), None)
-                item_col = next((c for c in df.columns if any(k in c for k in ['업종', '품명', '상품명'])), None)
+                # 컬럼 매칭 (신한카드 '가맹점명' 등 대응)
+                d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자'])), None)
+                p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점', '거래처', '상호', '이용처'])), None)
+                a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액'])), None)
+                n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드', '번호'])), None)
+                i_col = next((c for c in df.columns if any(k in str(c) for k in ['품명', '업종', '상품'])), None)
 
                 if p_col and a_col:
                     df[a_col] = df[a_col].apply(to_int)
                     df = df[df[a_col] != 0].copy()
                     
                     df['일자'] = df[d_col] if d_col else ""
-                    df['거래처'] = df[p_col].astype(str)
-                    df['품명'] = df[item_col].astype(str) if item_col else "-"
+                    df['거래처'] = df[p_col].astype(str).str.replace('"', '').strip()
+                    df['품명'] = df[i_col].astype(str).str.replace('"', '').strip() if i_col else "-"
                     
-                    # 공급가/부가세가 파일에 있으면 그대로 쓰고, 없으면 1.1 계산
+                    # 공급가액/부가세 계산 (기존 컬럼 있으면 사용)
+                    s_col = next((c for c in df.columns if '공급가액' in c), None)
+                    t_col = next((c for c in df.columns if '부가세' in c), None)
+                    
                     if s_col and t_col:
                         df['공급가액'] = df[s_col].apply(to_int)
                         df['부가세'] = df[t_col].apply(to_int)
@@ -257,9 +259,9 @@ elif curr == st.session_state.config["menu_3"]:
                                 group[final_cols].to_excel(writer, index=False)
                             zf.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
                     
-                    st.success(f"✅ {biz_name} 변환 성공!")
-                    st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{biz_name}_카드분리.zip")
+                    st.success(f"✅ {biz_name} 분석 완료!")
+                    st.download_button("📥 ZIP 다운로드", z_buf.getvalue(), f"{biz_name}_카드분리.zip")
             else:
-                st.error("데이터 시작점을 찾지 못했습니다. 신한카드 파일의 형식을 다시 확인해주세요.")
+                st.error("파일의 제목 줄을 찾지 못했습니다. 신한카드 CSV/엑셀 양식을 확인해주세요.")
         except Exception as e:
             st.error(f"오류 발생: {e}")
