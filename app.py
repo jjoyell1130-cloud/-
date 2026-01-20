@@ -4,100 +4,98 @@ import io
 import os
 import zipfile
 import re
-import pdfplumber
-from datetime import datetime
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [기초 엔진: 숫자 변환 및 PDF 생성 로직은 동일] ---
+# --- [기초 엔진: 숫자 변환] ---
 def to_int(val):
     try:
-        if pd.isna(val) or str(val).strip() == "": return 0
+        if pd.isna(val): return 0
+        # 따옴표, 콤마, 공백 제거 후 숫자로 변환
         s = str(val).replace('"', '').replace(',', '').strip()
         return int(float(s))
-    except: return 0
+    except:
+        return 0
 
-# ... (기존 extract_data_from_pdf, make_pdf_stream 함수 생략 - 위와 동일) ...
-
-# --- [UI 및 메뉴 설정 동일] ---
-# (중략: 세션 설정 및 사이드바 로직)
+# (중략: 메뉴 설정 및 기타 PDF 함수는 기존과 동일하게 유지)
 
 # --- [3. 메뉴별 메인 로직] ---
-# ... (Home, 마감작업, 매출매입장 PDF 변환 로직 생략) ...
+# ... (Home, 마감작업, 매출매입장 변환 생략) ...
 
 elif curr == "💳 카드매입 수기입력건":
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
-    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_final")
+    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_final_v3")
     
     if card_up:
         raw_fn = os.path.splitext(card_up.name)[0]
         biz_name = raw_fn.split('-')[0].split('_')[0].strip()
         
         try:
-            # 1. 파일 읽기 (CSV/Excel 대응)
+            # 1. 파일 읽기 (신한카드 CSV 특성 반영)
             if card_up.name.endswith('.csv'):
-                try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
-                except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
+                try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949', quotechar='"')
+                except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig', quotechar='"')
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # 2. 헤더 찾기 (신한카드 "이용카드\n(뒤4자리)" 등 줄바꿈 완벽 대응)
+            # 2. 헤더 행 찾기 (신한카드: 거래일, 이용카드, 가맹점명 등 포함 행)
             header_idx = None
             for i, row in raw_df.iterrows():
-                # 행 전체를 하나의 문자열로 합치고 특수문자 제거 후 검사
-                combined = "".join(map(str, row.values)).replace("\n", "").replace('"', '').replace(" ", "")
-                if ('가맹점' in combined or '거래처' in combined) and ('금액' in combined or '합계' in combined):
+                row_str = "".join(map(str, row.values)).replace("\n", "").replace(" ", "")
+                if '가맹점명' in row_str and '이용금액' in row_str:
                     header_idx = i
                     break
             
             if header_idx is not None:
-                # 3. 데이터 정제: 제목행 아래부터 실제 데이터만 추출
-                cols = [str(c).replace("\n", " ").replace('"', '').strip() for c in raw_df.iloc[header_idx]]
+                # 3. 데이터 정제: 제목행 아래부터 추출
                 df = raw_df.iloc[header_idx + 1:].copy()
-                df.columns = cols
+                # 제목행의 줄바꿈과 따옴표 제거하여 컬럼명 설정
+                df.columns = [str(c).replace("\n", "").replace('"', '').strip() for c in raw_df.iloc[header_idx]]
                 df = df.dropna(how='all', axis=0)
 
-                # 컬럼 매핑 (승인일, 가맹점명, 이용금액 등 신한카드 키워드 타겟팅)
-                d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자', '승인일'])), None)
-                p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점', '거래처', '상호', '이용처'])), None)
-                a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액', '승인금액'])), None)
-                n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드', '번호', '뒤4자리'])), None)
-                
+                # 4. 필수 컬럼 매핑 (신한카드 헤더 기준)
+                d_col = '거래일' if '거래일' in df.columns else (df.columns[0] if len(df.columns) > 0 else None)
+                p_col = '가맹점명' if '가맹점명' in df.columns else None
+                a_col = '이용금액' if '이용금액' in df.columns else None
+                n_col = next((c for c in df.columns if '뒤4자리' in c or '카드' in c), None)
+
                 if p_col and a_col:
-                    # 금액 전처리
+                    # 데이터 내용에서 따옴표 제거 및 숫자 변환
                     df[a_col] = df[a_col].apply(to_int)
                     df = df[df[a_col] > 0].copy() # 0원 건 제외
                     
-                    df['일자'] = df[d_col] if d_col else ""
-                    df['거래처'] = df[p_col].astype(str).str.replace('"', '').str.strip()
-                    df['품명'] = "카드매입" 
+                    # 위하고 양식에 맞게 데이터 재구성
+                    new_df = pd.DataFrame()
+                    new_df['일자'] = df[d_col].astype(str).str.replace('"', '').str.strip()
+                    new_df['거래처'] = df[p_col].astype(str).str.replace('"', '').str.strip()
+                    new_df['품명'] = "카드매입"
                     
-                    # 부가세/공급가액 계산 (신한카드 파일에 공급가액이 비어있는 경우 대비)
-                    df['공급가액'] = (df[a_col] / 1.1).round(0).astype(int)
-                    df['부가세'] = df[a_col] - df['공급가액']
-                    df['합계'] = df[a_col]
+                    # 신한카드 공급가액/부가세 컬럼이 있으면 활용, 없으면 계산
+                    if '공급가액' in df.columns and '부가세' in df.columns:
+                        new_df['공급가액'] = df['공급가액'].apply(to_int)
+                        new_df['부가세'] = df['부가세'].apply(to_int)
+                    else:
+                        new_df['공급가액'] = (df[a_col] / 1.1).round(0).astype(int)
+                        new_df['부가세'] = df[a_col] - new_df['공급가액']
+                    
+                    new_df['합계'] = df[a_col]
+                    
+                    # 카드번호 뒷자리 추출하여 그룹화
+                    card_ids = df[n_col].astype(str).str.extract(r'(\d{4})').fillna("카드")[0]
+                    new_df['card_group'] = card_ids
 
-                    # 4. 카드번호별 파일 분리 및 압축
+                    # 5. 파일 생성 및 압축
                     z_buf = io.BytesIO()
                     with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
-                        # 카드번호 뒷 4자리만 추출 ("본인8525" -> "8525")
-                        card_nums = df[n_col].astype(str).str.extract(r'(\d{4})').fillna("카드")[0]
-                        df['card_group'] = card_nums
-                        
-                        final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
-                        for c_num, group in df.groupby('card_group'):
+                        for c_num, group in new_df.groupby('card_group'):
                             excel_buf = io.BytesIO()
-                            # 신규 엑셀 시트에 데이터 기입
+                            # '위하고업로드'라는 새 시트에 깔끔하게 저장
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
-                                group[final_cols].to_excel(writer, index=False, sheet_name='위하고업로드')
+                                final_output = group.drop(columns=['card_group'])
+                                final_output.to_excel(writer, index=False, sheet_name='위하고업로드')
                             zf.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
                     
-                    st.success(f"✅ {biz_name} 처리 완료! (신한카드 형식 대응)")
-                    st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{biz_name}_위하고변환.zip")
+                    st.success(f"✅ {biz_name} 변환 완료! (신한카드 CSV 특수구조 해결)")
+                    st.download_button("📥 변환파일(ZIP) 다운로드", z_buf.getvalue(), f"{biz_name}_위하고양식.zip")
             else:
-                st.error("데이터의 시작점(제목줄)을 찾을 수 없습니다. 파일 형식을 확인해주세요.")
+                st.error("파일에서 '가맹점명'과 '이용금액'이 포함된 제목 행을 찾지 못했습니다.")
         except Exception as e:
-            st.error(f"변환 중 오류가 발생했습니다: {e}")
+            st.error(f"변환 오류 발생: {e}")
