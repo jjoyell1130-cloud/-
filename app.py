@@ -140,10 +140,10 @@ if curr == st.session_state.config["menu_0"]:
     with c_top1: st.link_button("🌐 WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
     with c_top2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
     c_bot1, c_bot2, c_bot3, c_bot4 = st.columns(4)
-    with c_bot1: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c_bot2: st.link_button("📅 부가세 상반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c_bot3: st.link_button("📅 부가세 하반기", "https://docs.google.com/spreadsheets/", use_container_width=True)
-    with c_bot4: st.link_button("💳 카드매입자료", "https://docs.google.com/spreadsheets/", use_container_width=True)
+    with c_bot1: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?gid=1260813981#gid=1260813981", use_container_width=True)
+    with c_bot2: st.link_button("📅 부가세 상반기", "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3", use_container_width=True)
+    with c_bot3: st.link_button("📅 부가세 하반기", "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r", use_container_width=True)
+    with c_bot4: st.link_button("💳 카드매입자료", "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe", use_container_width=True)
     st.divider()
     st.subheader("⌨️ 전표 입력 가이드")
     acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
@@ -250,3 +250,4 @@ elif curr == st.session_state.config["menu_3"]:
                 st.error("컬럼명을 찾지 못했습니다 (카드번호/이용 금액)")
         else:
             st.error("엑셀 데이터 시작 행을 찾지 못했습니다.")
+
