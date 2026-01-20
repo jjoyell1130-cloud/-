@@ -129,7 +129,6 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메뉴별 메인 로직] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
@@ -200,22 +199,26 @@ elif curr == "💳 카드매입 수기입력건":
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # 헤더 위치 찾기
+            # 신한카드 상단 불필요행 건너뛰고 제목 행 탐색
             header_idx = None
             for i, row in raw_df.iterrows():
-                row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace('"', '')
-                if any(pk in row_str for pk in ['가맹점', '거래처', '상호']) and any(ak in row_str for ak in ['금액', '합계', '이용금액']):
+                # 제목행 후보에서 공백/줄바꿈/따옴표 제거 후 핵심 키워드 체크
+                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace('"', '').replace(" ", "")
+                if any(k in row_str for k in ['가맹점', '거래처', '상호']) and any(k in row_str for k in ['금액', '합계', '이용금액']):
                     header_idx = i; break
             
             if header_idx is not None:
+                # 찾은 제목행(header_idx)을 기준으로 데이터 재구성 (기존 시트의 지저분한 상단 자동 무시)
+                cols = [str(c).replace("\n", " ").replace('"', '').strip() for c in raw_df.iloc[header_idx].values]
                 df = raw_df.iloc[header_idx+1:].copy()
-                df.columns = [str(c).replace("\n", " ").replace('"', '').strip() for c in raw_df.iloc[header_idx].values]
+                df.columns = cols
                 df = df.dropna(how='all', axis=0)
 
-                d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자'])), None)
+                # 컬럼 매칭
+                d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자', '승인일'])), None)
                 p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점', '거래처', '상호', '이용처'])), None)
-                a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액'])), None)
-                n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드', '번호'])), None)
+                a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액', '승인금액'])), None)
+                n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드', '번호', 'No'])), None)
                 i_col = next((c for c in df.columns if any(k in str(c) for k in ['업종', '품명', '상품'])), None)
 
                 if p_col and a_col:
@@ -223,10 +226,10 @@ elif curr == "💳 카드매입 수기입력건":
                     df = df[df[a_col] != 0].copy()
                     
                     df['일자'] = df[d_col] if d_col else ""
-                    # .str.strip()으로 수정하여 Series 오류 해결
                     df['거래처'] = df[p_col].astype(str).str.replace('"', '').str.strip()
                     df['품명'] = df[i_col].astype(str).str.replace('"', '').str.strip() if i_col else "-"
                     
+                    # 공급가액/부가세가 파일에 있으면 쓰고, 없으면 1.1로 계산
                     s_col = next((c for c in df.columns if '공급가액' in c), None)
                     t_col = next((c for c in df.columns if '부가세' in c), None)
                     
@@ -241,20 +244,21 @@ elif curr == "💳 카드매입 수기입력건":
 
                     z_buf = io.BytesIO()
                     with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
+                        # 카드번호 뒷 4자리 추출 로직
                         card_src = df[n_col].astype(str) if n_col else pd.Series(["0000"]*len(df))
                         df['card_id'] = card_src.str.extract(r'(\d{4})').fillna("0000")
                         
                         final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
                         for c_num, group in df.groupby('card_id'):
-                            if not c_num or c_num == 'nan' or c_num == '': continue
+                            if not c_num or str(c_num) == 'nan' or str(c_num) == '': continue
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 group[final_cols].to_excel(writer, index=False)
                             zf.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
                     
-                    st.success(f"✅ {biz_name} 분리 완료!")
-                    st.download_button("📥 ZIP 파일 다운로드", z_buf.getvalue(), f"{biz_name}_결과.zip")
+                    st.success(f"✅ {biz_name} 처리 완료!")
+                    st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{biz_name}_결과.zip")
             else:
-                st.error("파일의 데이터 시작점을 찾지 못했습니다.")
+                st.error("파일에서 데이터(가맹점, 금액 등) 제목 줄을 찾지 못했습니다.")
         except Exception as e:
             st.error(f"오류 발생: {e}")
