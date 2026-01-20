@@ -189,30 +189,29 @@ elif curr == st.session_state.config["menu_2"]:
 elif curr == "💳 카드매입 수기입력건":
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     
-    # [수정] 여러 파일 업로드 가능하도록 변경
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
     
     if card_ups:
         z_buf = io.BytesIO()
-        # 첫 번째 파일명에서 업체명 추출 (압축파일명용)
-        first_fn = os.path.splitext(card_ups[0].name)[0]
+        # [수정] 압축파일명용 업체명 추출
+        first_fn = card_ups[0].name.replace("2025 ", "").replace("2024 ", "")
         zip_biz_name = first_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
         
         with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for card_up in card_ups:
-                raw_fn = os.path.splitext(card_up.name)[0]
-                # 파일명에서 정보 추출
-                biz_name = raw_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
+                # 연도 등 불필요한 단어 제거하고 업체명 추출
+                clean_fn = card_up.name.replace("2025 ", "").replace("2024 ", "")
+                biz_name = clean_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
                 
                 # 카드사 판별
-                card_company = "카드사"
+                card_company = "카드"
                 for c_name in ["신한", "삼성", "현대", "국민", "농협", "우리", "하나", "롯데", "비씨"]:
-                    if c_name in raw_fn:
-                        card_company = c_name
+                    if c_name in card_up.name:
+                        card_company = f"{c_name}카드"
                         break
                 
-                # 파일명에서 뒷자리 숫자 4자리 추출 (현대0000 방지)
-                fn_nums = re.findall(r'\d{4}', raw_fn)
+                # [수정] 파일명에서 숫자 4자리 우선 추출 (현대 0000 방지)
+                fn_nums = re.findall(r'\d{4}', card_up.name)
                 fn_card_id = fn_nums[-1] if fn_nums else None
 
                 try:
@@ -250,7 +249,7 @@ elif curr == "💳 카드매입 수기입력건":
                             df['부가세'] = df[a_col] - df['공급가액']
                             df['합계'] = df[a_col]
 
-                            # 카드번호 결정 (파일명 번호를 우선)
+                            # 카드번호 결정 (파일명 번호 우선)
                             if fn_card_id:
                                 df['card_id'] = fn_card_id
                             elif n_col:
@@ -265,13 +264,12 @@ elif curr == "💳 카드매입 수기입력건":
                                 with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                     group[final_cols].to_excel(writer, index=False)
                                 
-                                # [파일명 형식 고정] 업체명_카드사_뒷자리_(업로드용).xlsx
-                                final_filename = f"{biz_name}_{card_company}_{c_num}_(업로드용).xlsx"
+                                # [수정] 엑셀파일명: 업체명 카드사 카드번호 (업로드용).xlsx
+                                final_filename = f"{biz_name} {card_company} {c_num} (업로드용).xlsx"
                                 zf.writestr(final_filename, excel_buf.getvalue())
                 except Exception as e:
                     st.error(f"오류: {e}")
 
         st.success(f"✅ {zip_biz_name} 처리 완료!")
-        # [압축파일명 형식 고정] 업체명_카드사_뒷자리_(업로드용)
-        # ※ 단일 카드사가 아닐 수 있으므로 뒷자리는 대표번호 혹은 생략 가능하나 요청하신 형식 준수
-        st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_카드매입_뒷자리_(업로드용).zip", use_container_width=True)
+        # [수정] 압축파일명: 업체명 카드내역서 (업로드용).zip
+        st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name} 카드내역서 (업로드용).zip", use_container_width=True)
