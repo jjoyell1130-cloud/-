@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진 및 숫자 변환] ---
+# --- [1. 기초 엔진] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -26,7 +26,6 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        # 숫자, 마이너스, 소수점 제외한 모든 문자 제거
         s = re.sub(r'[^\d.-]', '', str(val))
         return int(float(s))
     except: return 0
@@ -187,7 +186,6 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# --- [Menu 3: 카드매입 수기입력건 - 완결판] ---
 elif curr == st.session_state.config["menu_3"]:
     st.info("신한카드/삼성카드 등 카드사 엑셀을 업로드하면 위하고 양식으로 자동 변환합니다.")
     card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_final")
@@ -213,13 +211,13 @@ elif curr == st.session_state.config["menu_3"]:
 
             header_idx = None
             for i, row in raw_df.iterrows():
-                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace(" ", "")
+                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace(" ", "").replace('"', '')
                 if any(pk in row_str for pk in partner_k) and any(ak in row_str for ak in amt_k):
                     header_idx = i; break
             
             if header_idx is not None:
-                # 헤더의 줄바꿈 제거
-                cols = [str(c).replace("\n", "").replace(" ", "") for c in raw_df.iloc[header_idx].values]
+                # 헤더 정리
+                cols = [str(c).replace("\n", "").replace(" ", "").replace('"', '') for c in raw_df.iloc[header_idx].values]
                 df = raw_df.iloc[header_idx+1:].copy()
                 df.columns = cols
                 df = df.dropna(how='all', axis=0)
