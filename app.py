@@ -26,8 +26,8 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        # 숫자 외 문자(따옴표, 콤마 등) 모두 제거
-        s = re.sub(r'[^\d.-]', '', str(val))
+        # 신한카드 특유의 따옴표나 콤마 등을 안전하게 제거
+        s = str(val).replace('"', '').replace(',', '').strip()
         return int(float(s))
     except: return 0
 
@@ -100,8 +100,6 @@ def make_pdf_stream(data, title, biz_name, date_range):
     return buffer
 
 # --- [2. 세션 및 레이아웃] ---
-st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
-
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건",
@@ -121,6 +119,8 @@ if 'config' not in st.session_state:
 if 'selected_menu' not in st.session_state:
     st.session_state.selected_menu = st.session_state.config["menu_0"]
 
+st.set_page_config(page_title="세무 통합 관리 시스템", layout="wide")
+
 with st.sidebar:
     st.markdown("### 📁 Menu")
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
@@ -130,11 +130,10 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
+# --- [3. 메뉴별 메인 로직] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
-
-# --- [3. 메뉴별 메인 로직] ---
 
 if curr == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
@@ -187,10 +186,9 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# --- [Menu 3: 카드매입 수기입력건] --- (신한카드 오류 수정본)
-elif curr == st.session_state.config["menu_3"]:
-    st.info("카드내역서 엑셀/CSV를 업로드하시면 위하고 양식으로 자동 변환합니다.")
-    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_fixed")
+elif curr == "💳 카드매입 수기입력건":
+    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
+    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_final")
     
     if card_up:
         raw_fn = os.path.splitext(card_up.name)[0]
@@ -203,26 +201,25 @@ elif curr == st.session_state.config["menu_3"]:
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # 신한카드 특화: 줄바꿈 제거 후 헤더 위치 찾기
+            # 신한카드 전용 대응: 헤더 줄바꿈 및 따옴표 제거 후 검색
             header_idx = None
             for i, row in raw_df.iterrows():
-                row_str = "".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace(" ", "").replace('"', '')
-                if any(k in row_str for k in ['가맹점', '거래처', '상호']) and any(k in row_str for k in ['이용금액', '합계', '금액']):
+                row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace('"', '')
+                if any(pk in row_str for pk in ['가맹점', '거래처', '상호']) and any(ak in row_str for ak in ['금액', '합계', '이용금액']):
                     header_idx = i; break
             
             if header_idx is not None:
-                # 헤더 정제 (신한카드의 줄바꿈 제목 대응)
-                cols = [str(c).replace("\n", "").replace(" ", "").replace('"', '') for c in raw_df.iloc[header_idx].values]
+                # 컬럼 이름의 줄바꿈과 따옴표 제거
                 df = raw_df.iloc[header_idx+1:].copy()
-                df.columns = cols
+                df.columns = [str(c).replace("\n", " ").replace('"', '').strip() for c in raw_df.iloc[header_idx].values]
                 df = df.dropna(how='all', axis=0)
 
-                # 컬럼 매칭 (신한카드 '가맹점명' 등 대응)
+                # 키워드 매칭
                 d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자'])), None)
                 p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점', '거래처', '상호', '이용처'])), None)
                 a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액'])), None)
                 n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드', '번호'])), None)
-                i_col = next((c for c in df.columns if any(k in str(c) for k in ['품명', '업종', '상품'])), None)
+                i_col = next((c for c in df.columns if any(k in str(c) for k in ['업종', '품명', '상품'])), None)
 
                 if p_col and a_col:
                     df[a_col] = df[a_col].apply(to_int)
@@ -232,7 +229,7 @@ elif curr == st.session_state.config["menu_3"]:
                     df['거래처'] = df[p_col].astype(str).str.replace('"', '').strip()
                     df['품명'] = df[i_col].astype(str).str.replace('"', '').strip() if i_col else "-"
                     
-                    # 공급가액/부가세 계산 (기존 컬럼 있으면 사용)
+                    # 신한카드처럼 공급가액/부가세가 있는 경우 활용, 없으면 계산
                     s_col = next((c for c in df.columns if '공급가액' in c), None)
                     t_col = next((c for c in df.columns if '부가세' in c), None)
                     
@@ -247,21 +244,21 @@ elif curr == st.session_state.config["menu_3"]:
 
                     z_buf = io.BytesIO()
                     with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
-                        # 카드번호 뒷 4자리 추출
+                        # 신한카드 "본인8525" 형태에서 숫자 4자리만 추출
                         card_src = df[n_col].astype(str) if n_col else pd.Series(["0000"]*len(df))
                         df['card_id'] = card_src.str.extract(r'(\d{4})').fillna("0000")
                         
                         final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
                         for c_num, group in df.groupby('card_id'):
-                            if not c_num or c_num == 'nan': continue
+                            if not c_num or c_num == 'nan' or c_num == '': continue
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 group[final_cols].to_excel(writer, index=False)
                             zf.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
                     
-                    st.success(f"✅ {biz_name} 분석 완료!")
-                    st.download_button("📥 ZIP 다운로드", z_buf.getvalue(), f"{biz_name}_카드분리.zip")
+                    st.success(f"✅ {biz_name} 분리 완료!")
+                    st.download_button("📥 ZIP 파일 다운로드", z_buf.getvalue(), f"{biz_name}_결과.zip")
             else:
-                st.error("파일의 제목 줄을 찾지 못했습니다. 신한카드 CSV/엑셀 양식을 확인해주세요.")
+                st.error("파일의 데이터 시작점을 찾지 못했습니다.")
         except Exception as e:
             st.error(f"오류 발생: {e}")
