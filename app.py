@@ -26,7 +26,6 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        # 신한카드 특유의 따옴표나 콤마 등을 안전하게 제거
         s = str(val).replace('"', '').replace(',', '').strip()
         return int(float(s))
     except: return 0
@@ -201,7 +200,7 @@ elif curr == "💳 카드매입 수기입력건":
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # 신한카드 전용 대응: 헤더 줄바꿈 및 따옴표 제거 후 검색
+            # 헤더 위치 찾기
             header_idx = None
             for i, row in raw_df.iterrows():
                 row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "").replace('"', '')
@@ -209,12 +208,10 @@ elif curr == "💳 카드매입 수기입력건":
                     header_idx = i; break
             
             if header_idx is not None:
-                # 컬럼 이름의 줄바꿈과 따옴표 제거
                 df = raw_df.iloc[header_idx+1:].copy()
                 df.columns = [str(c).replace("\n", " ").replace('"', '').strip() for c in raw_df.iloc[header_idx].values]
                 df = df.dropna(how='all', axis=0)
 
-                # 키워드 매칭
                 d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자'])), None)
                 p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점', '거래처', '상호', '이용처'])), None)
                 a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '금액'])), None)
@@ -226,10 +223,10 @@ elif curr == "💳 카드매입 수기입력건":
                     df = df[df[a_col] != 0].copy()
                     
                     df['일자'] = df[d_col] if d_col else ""
-                    df['거래처'] = df[p_col].astype(str).str.replace('"', '').strip()
-                    df['품명'] = df[i_col].astype(str).str.replace('"', '').strip() if i_col else "-"
+                    # .str.strip()으로 수정하여 Series 오류 해결
+                    df['거래처'] = df[p_col].astype(str).str.replace('"', '').str.strip()
+                    df['품명'] = df[i_col].astype(str).str.replace('"', '').str.strip() if i_col else "-"
                     
-                    # 신한카드처럼 공급가액/부가세가 있는 경우 활용, 없으면 계산
                     s_col = next((c for c in df.columns if '공급가액' in c), None)
                     t_col = next((c for c in df.columns if '부가세' in c), None)
                     
@@ -244,7 +241,6 @@ elif curr == "💳 카드매입 수기입력건":
 
                     z_buf = io.BytesIO()
                     with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
-                        # 신한카드 "본인8525" 형태에서 숫자 4자리만 추출
                         card_src = df[n_col].astype(str) if n_col else pd.Series(["0000"]*len(df))
                         df['card_id'] = card_src.str.extract(r'(\d{4})').fillna("0000")
                         
