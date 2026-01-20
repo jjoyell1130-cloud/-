@@ -181,48 +181,54 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# --- [Menu 3 핵심 수정: accept_multiple_files=True 적용] ---
+# --- [Menu 3: 카드매입 멀티 업로드 및 파일명 형식 고정] ---
 elif curr == "💳 카드매입 수기입력건":
-    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
-    
-    # 여러 파일 업로드 가능하도록 수정
-    card_ups = st.file_uploader("카드사 엑셀/CSV 업로드 (다중 선택 가능)", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_multi")
+    st.info("💡 카드내역서 엑셀/CSV 파일들을 한 번에 여러 개 업로드할 수 있습니다.")
+    card_ups = st.file_uploader("카드사 파일 업로드 (다중 선택 가능)", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
     
     if card_ups:
         zip_main_buf = io.BytesIO()
+        processed_biz_name = "카드매입"
+        
         with zipfile.ZipFile(zip_main_buf, "a", zipfile.ZIP_DEFLATED) as zf_main:
             for card_up in card_ups:
-                raw_fn = os.path.splitext(card_up.name)[0]
-                biz_name = raw_fn.split('-')[0].split('_')[0].strip()
+                fn = card_up.name
+                # 파일명에서 업체명과 카드사 추출
+                biz_name = fn.split('-')[0].split('_')[0].split(' ')[0].strip()
+                processed_biz_name = biz_name # 마지막 파일 기준 혹은 대표 명칭
                 
+                card_company = "카드사"
+                if "신한" in fn: card_company = "신한"
+                elif "삼성" in fn: card_company = "삼성"
+                elif "국민" in fn or "KB" in fn: card_company = "국민"
+                elif "현대" in fn: card_company = "현대"
+                elif "농협" in fn or "NH" in fn: card_company = "농협"
+                elif "우리" in fn: card_company = "우리"
+
                 try:
-                    if card_up.name.endswith('.csv'):
+                    if fn.endswith('.csv'):
                         try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                         except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
                     else:
                         raw_df = pd.read_excel(card_up, header=None)
 
-                    # 키워드 탐색 및 데이터 정제 로직은 기존과 동일하게 유지
-                    date_k = ['거래일', '이용일', '일자', '승인일']
-                    partner_k = ['가맹점명', '거래처', '상호', '이용처']
-                    amt_k = ['이용금액', '합계', '승인금액', '금액']
-                    card_k = ['카드번호', '카드 No', '이용카드']
-
+                    # 키워드 탐색 (신한카드 줄바꿈 등 대응)
                     header_idx = None
                     for i, row in raw_df.iterrows():
-                        row_str = " ".join([str(v) for v in row.values if pd.notna(v)])
-                        if any(pk in row_str for pk in partner_k) and any(ak in row_str for ak in amt_k):
+                        row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "")
+                        if ('가맹점' in row_str or '거래처' in row_str) and ('금액' in row_str or '합계' in row_str):
                             header_idx = i; break
                     
                     if header_idx is not None:
                         df = raw_df.iloc[header_idx+1:].copy()
+                        # 헤더 청소
                         df.columns = [str(c).replace("\n", " ").strip() for c in raw_df.iloc[header_idx].values]
                         df = df.dropna(how='all', axis=0)
 
-                        d_col = next((c for c in df.columns if any(k in str(c) for k in date_k)), None)
-                        p_col = next((c for c in df.columns if any(k in str(c) for k in partner_k)), None)
-                        a_col = next((c for c in df.columns if any(k in str(c) for k in amt_k)), None)
-                        n_col = next((c for c in df.columns if any(k in str(c) for k in card_k)), None)
+                        d_col = next((c for c in df.columns if any(k in str(c) for k in ['거래일', '이용일', '일자', '승인일'])), df.columns[0])
+                        p_col = next((c for c in df.columns if any(k in str(c) for k in ['가맹점명', '거래처', '상호', '이용처'])), None)
+                        a_col = next((c for c in df.columns if any(k in str(c) for k in ['이용금액', '합계', '승인금액', '금액'])), None)
+                        n_col = next((c for c in df.columns if any(k in str(c) for k in ['카드번호', '카드 No', '이용카드'])), None)
 
                         if p_col and a_col:
                             df[a_col] = df[a_col].apply(to_int)
@@ -235,17 +241,25 @@ elif curr == "💳 카드매입 수기입력건":
                             df['부가세'] = df[a_col] - df['공급가액']
                             df['합계'] = df[a_col]
 
-                            df['card_id'] = df[n_col].astype(str).str.replace(r'[^0-9]', '', regex=True).str[-4:]
+                            # 카드 뒷자리 추출
+                            if n_col:
+                                df['card_id'] = df[n_col].astype(str).str.replace(r'[^0-9]', '', regex=True).str[-4:]
+                            else:
+                                df['card_id'] = "0000"
+
                             final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
-                            
                             for c_num, group in df.groupby('card_id'):
-                                if not c_num or c_num in ['nan', '']: continue
+                                if not c_num or c_num in ['nan', '']: c_num = "0000"
                                 excel_buf = io.BytesIO()
                                 with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                     group[final_cols].to_excel(writer, index=False)
-                                zf_main.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
+                                
+                                # [핵심] 파일명 형식: 업체명+카드사+뒷자리+(업로드용).xlsx
+                                final_filename = f"{biz_name}_{card_company}_{c_num}_(업로드용).xlsx"
+                                zf_main.writestr(final_filename, excel_buf.getvalue())
                 except Exception as e:
-                    st.error(f"{card_up.name} 처리 중 오류: {e}")
+                    st.error(f"{fn} 처리 중 오류: {e}")
         
-        st.success("✅ 모든 파일 변환 완료!")
-        st.download_button("📥 통합 결과(ZIP) 다운로드", zip_main_buf.getvalue(), "카드매입_결과_모음.zip", use_container_width=True)
+        st.success("✅ 모든 파일이 요청하신 형식으로 변환되었습니다.")
+        # [핵심] 압축파일 이름 형식: 업체명_카드매입_모음.zip
+        st.download_button(f"📥 {processed_biz_name}_변환결과_다운로드", zip_main_buf.getvalue(), f"{processed_biz_name}_카드매입_(업로드용).zip", use_container_width=True)
