@@ -26,7 +26,8 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        s = str(val).replace('"', '').replace(',', '').strip()
+        # 숫자, 마이너스, 소수점 제외한 모든 문자 제거 (신한/삼성 금액 정제용)
+        s = re.sub(r'[^\d.-]', '', str(val))
         return int(float(s))
     except: return 0
 
@@ -125,7 +126,7 @@ with st.sidebar:
     for k in ["menu_0", "menu_1", "menu_2", "menu_3"]:
         m_name = st.session_state.config[k]
         if st.button(m_name, key=f"btn_{k}", use_container_width=True, 
-                     type="primary" if st.session_state.selected_menu == m_name else "secondary"):
+                       type="primary" if st.session_state.selected_menu == m_name else "secondary"):
             st.session_state.selected_menu = m_name
             st.rerun()
 
@@ -185,32 +186,32 @@ elif curr == st.session_state.config["menu_2"]:
                         zf.writestr(f"{biz_name}_{g}장.pdf", pdf.getvalue())
             st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{biz_name}_매출매입장.zip", use_container_width=True)
 
-# --- [Menu 3: 카드매입 수기입력건] --- (이 부분이 핵심 수정 내용입니다)
-elif curr == "💳 카드매입 수기입력건":
-    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
+# --- [Menu 3: 카드매입 수기입력건 로직 통합본] ---
+elif curr == st.session_state.config["menu_3"]:
+    st.info("신한카드(거래일/가맹점명)와 삼성카드(이용일/업종) 데이터를 모두 자동 인식합니다.")
     
-    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3")
+    card_up = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], key="card_m3_integrated")
     
     if card_up:
         raw_fn = os.path.splitext(card_up.name)[0]
         biz_name = raw_fn.split('-')[0].split('_')[0].strip()
         
         try:
-            # 파일 읽기 (암호 풀린 상태 대응)
+            # 1. 파일 읽기
             if card_up.name.endswith('.csv'):
                 try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                 except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
             else:
                 raw_df = pd.read_excel(card_up, header=None)
 
-            # [핵심] 신한/삼성 UI를 모두 잡는 키워드 탐색
+            # 2. 통합 키워드 설정 (신한/삼성 UI 대응)
             date_k = ['거래일', '이용일', '일자', '승인일']
-            partner_k = ['가맹점명', '거래처', '상호', '이용처']
-            amt_k = ['이용금액', '합계', '승인금액', '금액']
+            partner_k = ['가맹점명', '거래처', '상호', '이용처', '내용']
+            amt_k = ['이용금액', '합계', '승인금액', '금액', '결제액']
             item_k = ['업종', '품명', '상품명', '종목']
-            card_k = ['카드번호', '카드 No', '이용카드']
+            card_k = ['카드번호', '카드 No', '이용카드', '카드명']
 
-            # 데이터 시작 행 찾기
+            # 3. 데이터 시작점(헤더) 자동 탐색
             header_idx = None
             for i, row in raw_df.iterrows():
                 row_str = " ".join([str(v) for v in row.values if pd.notna(v)])
@@ -230,10 +231,11 @@ elif curr == "💳 카드매입 수기입력건":
                 n_col = next((c for c in df.columns if any(k in str(c) for k in card_k)), None)
 
                 if p_col and a_col:
+                    # 금액 숫자 변환 (to_int 함수 활용)
                     df[a_col] = df[a_col].apply(to_int)
                     df = df[df[a_col] != 0].copy()
                     
-                    # 표준 양식으로 내용 채우기 (공란 방지)
+                    # 표준 컬럼으로 매핑 (공란 해결)
                     df['일자'] = df[d_col] if d_col else ""
                     df['거래처'] = df[p_col] if p_col else "상호미표기"
                     df['품명'] = df[i_col] if i_col is not None else "-" 
@@ -241,9 +243,10 @@ elif curr == "💳 카드매입 수기입력건":
                     df['부가세'] = df[a_col] - df['공급가액']
                     df['합계'] = df[a_col]
 
-                    # 카드번호별 파일 분리
+                    # 4. 카드번호별 파일 분리
                     z_buf = io.BytesIO()
                     with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
+                        # 번호에서 숫자만 추출 (예: 본인8525 -> 8525)
                         df['card_id'] = df[n_col].astype(str).str.replace(r'[^0-9]', '', regex=True).str[-4:]
                         
                         final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
@@ -255,8 +258,8 @@ elif curr == "💳 카드매입 수기입력건":
                             zf.writestr(f"{biz_name}_카드_{c_num}.xlsx", excel_buf.getvalue())
                     
                     st.success(f"✅ {biz_name} 분리 완료!")
-                    st.download_button("📥 ZIP 파일 다운로드", z_buf.getvalue(), f"{biz_name}_결과.zip")
+                    st.download_button("📥 ZIP 파일 다운로드", z_buf.getvalue(), f"{biz_name}_결과.zip", use_container_width=True)
             else:
-                st.error("파일의 데이터 시작점을 찾지 못했습니다.")
+                st.error("파일 양식을 인식할 수 없습니다. 데이터 시작점을 찾지 못했습니다.")
         except Exception as e:
             st.error(f"오류 발생: {e}")
