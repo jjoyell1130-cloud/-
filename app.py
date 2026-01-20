@@ -193,7 +193,6 @@ elif curr == "💳 카드매입 수기입력건":
     
     if card_ups:
         z_buf = io.BytesIO()
-        # [수정] 압축파일명용 업체명 추출
         first_fn = card_ups[0].name.replace("2025 ", "").replace("2024 ", "")
         zip_biz_name = first_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
         
@@ -208,7 +207,6 @@ elif curr == "💳 카드매입 수기입력건":
                         card_company = f"{c_name}카드"
                         break
                 
-                # 파일명에서 숫자 4자리 우선 추출 (현대 0000 방지용)
                 fn_nums = re.findall(r'\d{4}', card_up.name)
                 fn_card_id = fn_nums[-1] if fn_nums else None
 
@@ -219,9 +217,10 @@ elif curr == "💳 카드매입 수기입력건":
                     else:
                         raw_df = pd.read_excel(card_up, header=None)
 
-                    # [핵심] 기존 모든 탐색 키워드 유지
+                    # [핵심] 기존 키워드 탐색 변수 (사업자번호 포함)
                     date_k = ['거래일', '이용일', '일자', '승인일']
                     partner_k = ['가맹점명', '거래처', '상호', '이용처']
+                    biz_num_k = ['사업자번호', '사업자 등록번호', '가맹점번호'] # 사업자번호 키워드 추가
                     amt_k = ['이용금액', '합계', '승인금액', '금액']
                     item_k = ['업종', '품명', '상품명', '종목']
                     card_k = ['카드번호', '카드 No', '이용카드']
@@ -237,9 +236,9 @@ elif curr == "💳 카드매입 수기입력건":
                         df.columns = [str(c).replace("\n", " ").strip() for c in raw_df.iloc[header_idx].values]
                         df = df.dropna(how='all', axis=0)
 
-                        # 컬럼 매칭
                         d_col = next((c for c in df.columns if any(k in str(c) for k in date_k)), None)
                         p_col = next((c for c in df.columns if any(k in str(c) for k in partner_k)), None)
+                        b_col = next((c for c in df.columns if any(k in str(c) for k in biz_num_k)), None) # 사업자번호 컬럼 탐색
                         a_col = next((c for c in df.columns if any(k in str(c) for k in amt_k)), None)
                         i_col = next((c for c in df.columns if any(k in str(c) for k in item_k)), None)
                         n_col = next((c for c in df.columns if any(k in str(c) for k in card_k)), None)
@@ -248,15 +247,14 @@ elif curr == "💳 카드매입 수기입력건":
                             df[a_col] = df[a_col].apply(to_int)
                             df = df[df[a_col] != 0].copy()
                             
-                            # [오류수정] syntax error 해결 (else "" 추가)
                             df['일자'] = df[d_col] if d_col else ""
                             df['거래처'] = df[p_col] if p_col else "상호미표기"
+                            df['사업자번호'] = df[b_col] if b_col else "" # 사업자번호 데이터 유지
                             df['품명'] = df[i_col] if i_col is not None else "카드매입"
                             df['공급가액'] = (df[a_col] / 1.1).round(0).astype(int)
                             df['부가세'] = df[a_col] - df['공급가액']
                             df['합계'] = df[a_col]
 
-                            # 카드번호 결정 (파일명 번호 우선)
                             if fn_card_id:
                                 df['card_id'] = fn_card_id
                             elif n_col:
@@ -264,19 +262,18 @@ elif curr == "💳 카드매입 수기입력건":
                             else:
                                 df['card_id'] = "0000"
 
-                            final_cols = ['일자', '거래처', '품명', '공급가액', '부가세', '합계']
+                            # [수정] 사업자번호를 포함한 최종 컬럼 구성
+                            final_cols = ['일자', '거래처', '사업자번호', '품명', '공급가액', '부가세', '합계']
                             for c_num, group in df.groupby('card_id'):
                                 if not c_num or c_num in ['nan', '']: c_num = "0000"
                                 excel_buf = io.BytesIO()
                                 with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                     group[final_cols].to_excel(writer, index=False)
                                 
-                                # [수정] 엑셀파일명: 업체명 카드사 카드번호 (업로드용).xlsx
                                 final_filename = f"{biz_name} {card_company} {c_num} (업로드용).xlsx"
                                 zf.writestr(final_filename, excel_buf.getvalue())
                 except Exception as e:
                     st.error(f"오류: {e}")
 
         st.success(f"✅ {zip_biz_name} 처리 완료!")
-        # [수정] 압축파일명: 업체명 카드내역서 (업로드용).zip
         st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name} 카드내역서 (업로드용).zip", use_container_width=True)
