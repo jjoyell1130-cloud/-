@@ -26,7 +26,8 @@ except:
 def to_int(val):
     try:
         if pd.isna(val) or str(val).strip() == "": return 0
-        s = str(val).replace('"', '').replace(',', '').strip()
+        # 숫자 외의 문자(쉼표, 따옴표 등) 제거 후 정수 변환
+        s = re.sub(r'[^0-9.-]', '', str(val)).strip()
         return int(float(s))
     except: return 0
 
@@ -175,11 +176,7 @@ elif curr == st.session_state.config["menu_2"]:
         with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for f_pdf in f_pdfs:
                 try:
-                    try: df_all = pd.read_excel(f_pdf)
-                    except: 
-                        f_pdf.seek(0)
-                        df_all = pd.read_excel(f_pdf, engine='openpyxl')
-                    
+                    df_all = pd.read_excel(f_pdf)
                     pure_name = os.path.splitext(f_pdf.name)[0].split(" ")[0]
                     try:
                         tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
@@ -193,12 +190,12 @@ elif curr == st.session_state.config["menu_2"]:
                                 pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
                                 pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
                                 zf.writestr(pdf_filename, pdf_stream.getvalue())
-                except: st.error(f"⚠️ {f_pdf.name} 파일은 암호가 걸려있거나 손상되어 건너뜁니다.")
-        st.success(f"✅ 처리가 가능한 {len(f_pdfs)}개 파일 변환 시도 완료")
+                except Exception as e: st.error(f"⚠️ {f_pdf.name} 처리 중 오류: {e}")
+        st.success(f"✅ 처리 완료")
         st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_하반기_매출매입장_모음.zip", use_container_width=True)
 
 elif curr == st.session_state.config["menu_3"]:
-    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다. (암호 파일 제외)")
+    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
     if card_ups:
         z_buf = io.BytesIO()
@@ -208,6 +205,7 @@ elif curr == st.session_state.config["menu_3"]:
         with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for card_up in card_ups:
                 try:
+                    # 엑셀/CSV 읽기 시도
                     if card_up.name.lower().endswith('.csv'):
                         try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                         except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
@@ -215,14 +213,10 @@ elif curr == st.session_state.config["menu_3"]:
                         try: raw_df = pd.read_excel(card_up, header=None)
                         except:
                             card_up.seek(0)
-                            try: raw_df = pd.read_excel(card_up, header=None, engine='openpyxl')
-                            except:
-                                card_up.seek(0)
-                                try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
-                                except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
+                            raw_df = pd.read_excel(card_up, header=None, engine='openpyxl')
                     
-                    # 데이터 처리 로직 (이전과 동일)
-                    date_k, partner_k, biz_num_k, amt_k = ['거래일','일자','승인일'], ['가맹점','거래처','상호'], ['사업자번호','등록번호'], ['이용금액','합계','승인금액']
+                    # 제목행(헤더) 찾기 - 현대카드 등 상단 빈 행 대응
+                    date_k, partner_k, biz_num_k, amt_k = ['이용일','일자','승인일'], ['가맹점명','거래처','상호'], ['사업자등록번호','사업자번호','등록번호'], ['이용 금액','합계','승인금액','금액']
                     header_idx = None
                     for i, row in raw_df.iterrows():
                         row_str = " ".join([str(v) for v in row.values if pd.notna(v)])
@@ -233,20 +227,24 @@ elif curr == st.session_state.config["menu_3"]:
                         df = raw_df.iloc[header_idx+1:].copy()
                         df.columns = [str(c).strip() for c in raw_df.iloc[header_idx].values]
                         df = df.dropna(how='all', axis=0)
+                        
                         d_col = next((c for c in df.columns if any(k in str(c) for k in date_k)), None)
                         p_col = next((c for c in df.columns if any(k in str(c) for k in partner_k)), None)
                         b_col = next((c for c in df.columns if any(k in str(c) for k in biz_num_k)), None)
                         a_col = next((c for c in df.columns if any(k in str(c) for k in amt_k)), None)
                         
                         if p_col and a_col:
-                            df['일자'] = pd.to_datetime(df[d_col], errors='coerce').dt.strftime('%Y-%m-%d') if d_col else ""
+                            # 1. 날짜 처리 (YYYY-MM-DD)
+                            df['일자'] = pd.to_datetime(df[d_col], errors='coerce').dt.strftime('%Y-%m-%d')
+                            # 2. 사업자번호 처리 (하이픈 제거)
                             df['사업자번호'] = df[b_col].astype(str).str.replace(r'[^0-9]', '', regex=True) if b_col else ""
-                            df['거래처'], df['품명'] = df[p_col], "카드매입"
-                            df[a_col] = df[a_col].apply(to_int)
-                            df = df[df[a_col] != 0].copy()
-                            df['공급가액'] = (df[a_col] / 1.1).round(0).astype(int)
-                            df['부가세'] = df[a_col] - df['공급가액']
-                            df['합계'] = df[a_col]
+                            df['거래처'] = df[p_col]
+                            df['품명'] = "카드매입"
+                            # 3. 금액 처리 (따옴표, 쉼표 제거 후 정수화)
+                            df['합계'] = df[a_col].apply(to_int)
+                            df = df[df['합계'] > 0].copy()
+                            df['공급가액'] = (df['합계'] / 1.1).round(0).astype(int)
+                            df['부가세'] = df['합계'] - df['공급가액']
                             
                             f_cols = ['일자', '거래처', '사업자번호', '품명', '공급가액', '부가세', '합계']
                             excel_buf = io.BytesIO()
@@ -255,17 +253,11 @@ elif curr == st.session_state.config["menu_3"]:
                             
                             clean_fn = card_up.name.replace("2025 ", "").replace("2024 ", "")
                             biz_name = clean_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
-                            card_company = "카드"
-                            for c_name in ["신한", "삼성", "현대", "국민", "농협", "우리", "하나", "롯데", "비씨"]:
-                                if c_name in card_up.name: card_company = f"{c_name}카드"; break
-                            
-                            zf.writestr(f"{biz_name}_{card_company}_업로드용.xlsx", excel_buf.getvalue())
+                            zf.writestr(f"{biz_name}_업로드용.xlsx", excel_buf.getvalue())
                             success_count += 1
-                except:
-                    st.error(f"❌ {card_up.name}: 이 파일은 암호가 걸려있습니다. 암호를 해제하고 다시 올려주세요.")
+                except Exception as e:
+                    st.error(f"❌ {card_up.name} 처리 중 오류 발생: {e}")
         
         if success_count > 0:
             st.success(f"✅ {success_count}개 파일 변환 완료!")
             st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
-        else:
-            st.warning("⚠️ 변환된 파일이 없습니다. 암호가 걸리지 않은 정상적인 파일을 업로드해 주세요.")
