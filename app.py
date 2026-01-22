@@ -147,31 +147,39 @@ if curr == st.session_state.config["menu_0"]:
     with c_bot4: st.link_button("💳 카드매입자료", "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe", use_container_width=True)
     st.divider()
     st.subheader("⌨️ 전표 입력 가이드")
-    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
+    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
 # 메뉴 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
-    # [1] 업로드 칸 (최상단)
-    st.info("PDF 파일을 업로드하면 안내문이 이곳에 생성됩니다.")
-    p_h = st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
-    p_l = st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
+    # 1. 안내문 (최상단)
+    st.subheader("📝 안내문")
     
-    # [2] 안내문 결과 (중간)
-    st.subheader("📝 안내문 (복사용)")
+    # 세션에서 파일 업로드 객체 가져오기 (rerun 시에도 유지)
+    p_h = st.session_state.get("m1_pdf_up", [])
+    p_l = st.session_state.get("m1_ledger_up", [])
+    
     all_up = (p_h if p_h else []) + (p_l if p_l else [])
+    
     if all_up:
         res = extract_data_from_pdf(all_up)
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
         msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
         st.code(msg, language="text")
     else:
-        st.write("파일을 기다리고 있습니다...")
+        st.info("파일을 업로드하면 안내문이 이곳에 생성됩니다.")
 
     st.divider()
 
-    # [3] 템플릿 수정 (하단)
+    # 2. 파일 업로드 (중간)
+    col1, col2 = st.columns(2)
+    with col1: st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
+    with col2: st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
+
+    st.divider()
+
+    # 3. 템플릿 수정 (하단)
     with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
         new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
                                      value=st.session_state.config["prompt_template"], height=250)
