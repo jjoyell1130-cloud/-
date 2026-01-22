@@ -147,7 +147,7 @@ if curr == st.session_state.config["menu_0"]:
     with c_bot4: st.link_button("💳 카드매입자료", "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe", use_container_width=True)
     st.divider()
     st.subheader("⌨️ 전표 입력 가이드")
-    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
+    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
@@ -186,7 +186,6 @@ elif curr == st.session_state.config["menu_2"]:
                         tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
                         if not tgt.empty:
                             pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
-                            # 파일명 규칙: 2025 업체명 -하반기 매출장or매입장
                             pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
                             zf.writestr(pdf_filename, pdf_stream.getvalue())
         st.success(f"✅ {len(f_pdfs)}개 파일 처리 완료")
@@ -214,12 +213,11 @@ elif curr == st.session_state.config["menu_3"]:
                         try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                         except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
                     else: raw_df = pd.read_excel(card_up, header=None)
+                    
                     date_k = ['거래일', '이용일', '일자', '승인일']
                     partner_k = ['가맹점명', '거래처', '상호', '이용처']
                     biz_num_k = ['사업자번호', '사업자 등록번호', '가맹점번호']
                     amt_k = ['이용금액', '합계', '승인금액', '금액']
-                    item_k = ['업종', '품명', '상품명', '종목']
-                    card_k = ['카드번호', '카드 No', '이용카드']
                     header_idx = None
                     for i, row in raw_df.iterrows():
                         row_str = " ".join([str(v) for v in row.values if pd.notna(v)]).replace("\n", "")
@@ -229,33 +227,37 @@ elif curr == st.session_state.config["menu_3"]:
                         df = raw_df.iloc[header_idx+1:].copy()
                         df.columns = [str(c).replace("\n", " ").strip() for c in raw_df.iloc[header_idx].values]
                         df = df.dropna(how='all', axis=0)
+                        
                         d_col = next((c for c in df.columns if any(k in str(c) for k in date_k)), None)
                         p_col = next((c for c in df.columns if any(k in str(c) for k in partner_k)), None)
                         b_col = next((c for c in df.columns if any(k in str(c) for k in biz_num_k)), None)
                         a_col = next((c for c in df.columns if any(k in str(c) for k in amt_k)), None)
-                        i_col = next((c for c in df.columns if any(k in str(c) for k in item_k)), None)
-                        n_col = next((c for c in df.columns if any(k in str(c) for k in card_k)), None)
+                        
                         if p_col and a_col:
+                            # --- [위하고용 데이터 변환 로직] ---
+                            # 1. 날짜 형식 변경 (2025.12.26 -> 2025-12-26)
+                            if d_col:
+                                df['일자'] = pd.to_datetime(df[d_col], errors='coerce').dt.strftime('%Y-%m-%d')
+                            else: df['일자'] = ""
+                            
+                            # 2. 사업자번호 하이픈 제거 (숫자만 남기기)
+                            if b_col:
+                                df['사업자번호'] = df[b_col].astype(str).str.replace(r'[^0-9]', '', regex=True)
+                            else: df['사업자번호'] = ""
+                            
+                            df['거래처'] = df[p_col]
+                            df['품명'] = "카드매입"
                             df[a_col] = df[a_col].apply(to_int)
                             df = df[df[a_col] != 0].copy()
-                            df['일자'] = df[d_col] if d_col else ""
-                            df['거래처'] = df[p_col] if p_col else "상호미표기"
-                            df['사업자번호'] = df[b_col] if b_col else ""
-                            df['품명'] = df[i_col] if i_col is not None else "카드매입"
                             df['공급가액'] = (df[a_col] / 1.1).round(0).astype(int)
                             df['부가세'] = df[a_col] - df['공급가액']
                             df['합계'] = df[a_col]
-                            if fn_card_id: df['card_id'] = fn_card_id
-                            elif n_col: df['card_id'] = df[n_col].astype(str).str.replace(r'[^0-9]', '', regex=True).str[-4:]
-                            else: df['card_id'] = "0000"
+                            
                             final_cols = ['일자', '거래처', '사업자번호', '품명', '공급가액', '부가세', '합계']
-                            for c_num, group in df.groupby('card_id'):
-                                if not c_num or c_num in ['nan', '']: c_num = "0000"
-                                excel_buf = io.BytesIO()
-                                with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
-                                    group[final_cols].to_excel(writer, index=False)
-                                final_filename = f"{biz_name} {card_company} {c_num} (업로드용).xlsx"
-                                zf.writestr(final_filename, excel_buf.getvalue())
+                            excel_buf = io.BytesIO()
+                            with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
+                                df[final_cols].to_excel(writer, index=False)
+                            zf.writestr(f"{biz_name}_{card_company}_업로드용.xlsx", excel_buf.getvalue())
                 except Exception as e: st.error(f"오류: {e}")
-        st.success(f"✅ {zip_biz_name} 처리 완료!")
-        st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name} 카드내역서 (업로드용).zip", use_container_width=True)
+        st.success("✅ 위하고 업로드용 변환 완료!")
+        st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
