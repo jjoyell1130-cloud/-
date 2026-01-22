@@ -174,45 +174,40 @@ elif curr == st.session_state.config["menu_2"]:
         first_biz = os.path.splitext(f_pdfs[0].name)[0].split(" ")[0]
         with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for f_pdf in f_pdfs:
-                # OLE2 오류 방지를 위해 엔진 및 오류 예외 처리 보강
-                try: df_all = pd.read_excel(f_pdf)
-                except: 
-                    f_pdf.seek(0)
-                    df_all = pd.read_excel(f_pdf, engine='openpyxl')
-                
-                pure_name = os.path.splitext(f_pdf.name)[0].split(" ")[0]
                 try:
-                    tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
-                    d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}"
-                except: d_range = "2025년"
-                type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
-                if type_col:
-                    for g in ['매출', '매입']:
-                        tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
-                        if not tgt.empty:
-                            pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
-                            pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
-                            zf.writestr(pdf_filename, pdf_stream.getvalue())
-        st.success(f"✅ {len(f_pdfs)}개 파일 처리 완료")
+                    try: df_all = pd.read_excel(f_pdf)
+                    except: 
+                        f_pdf.seek(0)
+                        df_all = pd.read_excel(f_pdf, engine='openpyxl')
+                    
+                    pure_name = os.path.splitext(f_pdf.name)[0].split(" ")[0]
+                    try:
+                        tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
+                        d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}"
+                    except: d_range = "2025년"
+                    type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
+                    if type_col:
+                        for g in ['매출', '매입']:
+                            tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                            if not tgt.empty:
+                                pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
+                                pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
+                                zf.writestr(pdf_filename, pdf_stream.getvalue())
+                except: st.error(f"⚠️ {f_pdf.name} 파일은 암호가 걸려있거나 손상되어 건너뜁니다.")
+        st.success(f"✅ 처리가 가능한 {len(f_pdfs)}개 파일 변환 시도 완료")
         st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_하반기_매출매입장_모음.zip", use_container_width=True)
 
 elif curr == st.session_state.config["menu_3"]:
-    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
+    st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다. (암호 파일 제외)")
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
     if card_ups:
         z_buf = io.BytesIO()
         first_fn = card_ups[0].name.replace("2025 ", "").replace("2024 ", "")
         zip_biz_name = first_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
+        success_count = 0
         with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for card_up in card_ups:
-                clean_fn = card_up.name.replace("2025 ", "").replace("2024 ", "")
-                biz_name = clean_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
-                card_company = "카드"
-                for c_name in ["신한", "삼성", "현대", "국민", "농협", "우리", "하나", "롯데", "비씨"]:
-                    if c_name in card_up.name:
-                        card_company = f"{c_name}카드"; break
                 try:
-                    # OLE2 오류 해결 핵심 로직: CSV 시도 -> 엔진별 시도
                     if card_up.name.lower().endswith('.csv'):
                         try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                         except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
@@ -223,10 +218,10 @@ elif curr == st.session_state.config["menu_3"]:
                             try: raw_df = pd.read_excel(card_up, header=None, engine='openpyxl')
                             except:
                                 card_up.seek(0)
-                                # 확장자가 엑셀인데 실제론 텍스트인 경우 대응
                                 try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                                 except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
                     
+                    # 데이터 처리 로직 (이전과 동일)
                     date_k, partner_k, biz_num_k, amt_k = ['거래일','일자','승인일'], ['가맹점','거래처','상호'], ['사업자번호','등록번호'], ['이용금액','합계','승인금액']
                     header_idx = None
                     for i, row in raw_df.iterrows():
@@ -257,7 +252,20 @@ elif curr == st.session_state.config["menu_3"]:
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 df[f_cols].to_excel(writer, index=False)
+                            
+                            clean_fn = card_up.name.replace("2025 ", "").replace("2024 ", "")
+                            biz_name = clean_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
+                            card_company = "카드"
+                            for c_name in ["신한", "삼성", "현대", "국민", "농협", "우리", "하나", "롯데", "비씨"]:
+                                if c_name in card_up.name: card_company = f"{c_name}카드"; break
+                            
                             zf.writestr(f"{biz_name}_{card_company}_업로드용.xlsx", excel_buf.getvalue())
-                except Exception as e: st.error(f"{card_up.name} 처리 중 오류: {e}")
-        st.success("✅ 파일 형식 오류 해결 및 변환 완료!")
-        st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
+                            success_count += 1
+                except:
+                    st.error(f"❌ {card_up.name}: 이 파일은 암호가 걸려있습니다. 암호를 해제하고 다시 올려주세요.")
+        
+        if success_count > 0:
+            st.success(f"✅ {success_count}개 파일 변환 완료!")
+            st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
+        else:
+            st.warning("⚠️ 변환된 파일이 없습니다. 암호가 걸리지 않은 정상적인 파일을 업로드해 주세요.")
