@@ -234,14 +234,13 @@ elif curr == st.session_state.config["menu_3"]:
                         a_col = next((c for c in df.columns if any(k in str(c) for k in amt_k)), None)
                         
                         if p_col and a_col:
-                            # --- [위하고용 데이터 변환 로직] ---
-                            # 1. 날짜 형식 변경 (2025.12.26 -> 2025-12-26)
                             if d_col:
+                                # 날짜를 YYYY-MM-DD 하이픈 형식으로 통일
                                 df['일자'] = pd.to_datetime(df[d_col], errors='coerce').dt.strftime('%Y-%m-%d')
                             else: df['일자'] = ""
                             
-                            # 2. 사업자번호 하이픈 제거 (숫자만 남기기)
                             if b_col:
+                                # 사업자번호에서 하이픈 제거하여 숫자만 남김
                                 df['사업자번호'] = df[b_col].astype(str).str.replace(r'[^0-9]', '', regex=True)
                             else: df['사업자번호'] = ""
                             
@@ -257,6 +256,7 @@ elif curr == st.session_state.config["menu_3"]:
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 df[final_cols].to_excel(writer, index=False)
+                            # 중복 확장자 방지를 위해 .xlsx 제거 후 이름 생성
                             zf.writestr(f"{biz_name}_{card_company}_업로드용.xlsx", excel_buf.getvalue())
                 except Exception as e: st.error(f"오류: {e}")
         st.success("✅ 위하고 업로드용 변환 완료!")
