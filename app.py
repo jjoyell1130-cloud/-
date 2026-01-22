@@ -174,7 +174,9 @@ elif curr == st.session_state.config["menu_2"]:
         first_biz = os.path.splitext(f_pdfs[0].name)[0].split(" ")[0]
         with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for f_pdf in f_pdfs:
-                df_all = pd.read_excel(f_pdf)
+                # OLE2 오류 방지를 위해 엔진 명시적 지정 시도
+                try: df_all = pd.read_excel(f_pdf, engine='openpyxl')
+                except: df_all = pd.read_excel(f_pdf)
                 pure_name = os.path.splitext(f_pdf.name)[0].split(" ")[0]
                 try:
                     tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
@@ -186,6 +188,7 @@ elif curr == st.session_state.config["menu_2"]:
                         tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
                         if not tgt.empty:
                             pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
+                            # 요청하신 파일명 규칙 유지
                             pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
                             zf.writestr(pdf_filename, pdf_stream.getvalue())
         st.success(f"✅ {len(f_pdfs)}개 파일 처리 완료")
@@ -209,10 +212,15 @@ elif curr == st.session_state.config["menu_3"]:
                 fn_nums = re.findall(r'\d{4}', card_up.name)
                 fn_card_id = fn_nums[-1] if fn_nums else None
                 try:
-                    if card_up.name.endswith('.csv'):
+                    if card_up.name.lower().endswith('.csv'):
                         try: raw_df = pd.read_csv(card_up, header=None, encoding='cp949')
                         except: card_up.seek(0); raw_df = pd.read_csv(card_up, header=None, encoding='utf-8-sig')
-                    else: raw_df = pd.read_excel(card_up, header=None)
+                    else:
+                        # OLE2 Workbook 오류 해결 핵심: 확장자와 상관없이 엔진 순차 시도
+                        try: raw_df = pd.read_excel(card_up, header=None, engine='xlrd')
+                        except: 
+                            try: raw_df = pd.read_excel(card_up, header=None, engine='openpyxl')
+                            except: raw_df = pd.read_excel(card_up, header=None)
                     
                     date_k = ['거래일', '이용일', '일자', '승인일']
                     partner_k = ['가맹점명', '거래처', '상호', '이용처']
@@ -235,12 +243,10 @@ elif curr == st.session_state.config["menu_3"]:
                         
                         if p_col and a_col:
                             if d_col:
-                                # 날짜를 YYYY-MM-DD 하이픈 형식으로 통일
                                 df['일자'] = pd.to_datetime(df[d_col], errors='coerce').dt.strftime('%Y-%m-%d')
                             else: df['일자'] = ""
                             
                             if b_col:
-                                # 사업자번호에서 하이픈 제거하여 숫자만 남김
                                 df['사업자번호'] = df[b_col].astype(str).str.replace(r'[^0-9]', '', regex=True)
                             else: df['사업자번호'] = ""
                             
@@ -256,8 +262,7 @@ elif curr == st.session_state.config["menu_3"]:
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 df[final_cols].to_excel(writer, index=False)
-                            # 중복 확장자 방지를 위해 .xlsx 제거 후 이름 생성
                             zf.writestr(f"{biz_name}_{card_company}_업로드용.xlsx", excel_buf.getvalue())
-                except Exception as e: st.error(f"오류: {e}")
-        st.success("✅ 위하고 업로드용 변환 완료!")
+                except Exception as e: st.error(f"파일 처리 중 오류 발생 ({card_up.name}): {e}")
+        st.success("✅ 위하고용 변환 및 오류 해결 완료!")
         st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
