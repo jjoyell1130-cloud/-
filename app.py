@@ -153,23 +153,25 @@ if curr == st.session_state.config["menu_0"]:
 
 # 메뉴 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
-    # 1. 완성된 안내문 (상단 배치)
-    st.subheader("📝 완성된 안내문 (복사용)")
+    # [1] 업로드 칸 (최상단)
+    st.info("PDF 파일을 업로드하면 안내문이 이곳에 생성됩니다.")
     p_h = st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
     p_l = st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
-    all_up = (p_h if p_h else []) + (p_l if p_l else [])
     
+    # [2] 안내문 결과 (중간)
+    st.subheader("📝 안내문 (복사용)")
+    all_up = (p_h if p_h else []) + (p_l if p_l else [])
     if all_up:
         res = extract_data_from_pdf(all_up)
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
         msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
         st.code(msg, language="text")
     else:
-        st.info("PDF 파일을 업로드하면 안내문이 이곳에 생성됩니다.")
+        st.write("파일을 기다리고 있습니다...")
 
     st.divider()
 
-    # 2. 템플릿 수정 (하단 배치)
+    # [3] 템플릿 수정 (하단)
     with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
         new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
                                      value=st.session_state.config["prompt_template"], height=250)
