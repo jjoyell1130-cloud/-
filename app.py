@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진] ---
+# --- [1. 기초 엔진 및 폰트 설정] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -135,27 +135,63 @@ curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
-# Menu 0, 1, 2는 생략 (이전과 동일)
 if curr == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
-    # ... 기존 홈 내용 ...
-    st.info("Home 메뉴")
+    c_top1, c_top2 = st.columns(2)
+    with c_top1: st.link_button("🌐 WEHAGO", "https://www.wehago.com/#/main", use_container_width=True)
+    with c_top2: st.link_button("🏠 홈택스", "https://hometax.go.kr/", use_container_width=True)
+    c_bot1, c_bot2, c_bot3, c_bot4 = st.columns(4)
+    with c_bot1: st.link_button("📋 신고리스트", "https://docs.google.com/spreadsheets/d/1VwvR2dk7TwymlemzDIOZdp9O13UYzuQr/edit?gid=1260813981#gid=1260813981", use_container_width=True)
+    with c_bot2: st.link_button("📅 부가세 상반기", "https://drive.google.com/drive/folders/1cDv6p6h5z3_4KNF-TZ5c7QfGzVvh4JV3", use_container_width=True)
+    with c_bot3: st.link_button("📅 부가세 하반기", "https://drive.google.com/drive/folders/1OL84Uh64hAe-lnlK0ZV4b6r6hWa2Qz-r", use_container_width=True)
+    with c_bot4: st.link_button("💳 카드매입자료", "https://drive.google.com/drive/folders/1k5kbUeFPvbtfqPlM61GM5PHhOy7s0JHe", use_container_width=True)
+    st.divider()
+    st.subheader("⌨️ 전표 입력 가이드")
+    acc_data = [["유류대", "매입/불공제", "차량유지비", "822"], ["편의점", "매입/불공제", "여비교통비", "812"], ["다이소", "매입", "소모품비", "830"], ["식당", "매입/불공제", "복리후생비", "811"], ["거래처(물건)", "매입", "상품", "146"], ["홈쇼핑/인터넷구매", "매입", "소모품비", "830"], ["주차장/소액세금", "일반", "차량유지비", "822"], ["휴게소", "공제확인", "차량/여비교통", ""], ["전기요금", "매입", "전력비", ""], ["수도요금", "일반", "수도광열비", ""], ["통신비", "매입", "통신비", "814"], ["금융결제원", "일반", "세금과공과", ""], ["약국", "일반", "소모품비", "830"], ["모텔", "일반", "여비교통비/출장비", ""], ["보안(캡스)/홈페이지", "매입", "지급수수료", "831"], ["아울렛(작업복)", "매입", "소모품비", ""], ["컴퓨터 A/S", "매입", "수선비", "820"], ["결제대행업체(PG)", "일반", "소모품비", "830"], ["신용카드알림", "일반", "지급수수료", ""], ["휴대폰소액결제", "일반", "소모품비", ""], ["병원", "일반", "복리후생비", ""], ["로카모빌리티", "일반", "소모품비", ""], ["소프트웨어 개발", "매입", "지급수수료", "831"]]
+    df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
+    st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
 elif curr == st.session_state.config["menu_1"]:
-    st.subheader("📝 마감작업")
-    # ... 기존 마감작업 내용 ...
+    st.subheader("📝 완성된 안내문 (복사용)")
+    p_h = st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
+    p_l = st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
+    all_up = (p_h if p_h else []) + (p_l if p_l else [])
+    if all_up:
+        res = extract_data_from_pdf(all_up)
+        biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
+        msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
+        st.code(msg, language="text")
 
 elif curr == st.session_state.config["menu_2"]:
-    st.subheader("📁 매출매입장 PDF 변환")
-    # ... 기존 PDF 변환 내용 ...
+    f_excels = st.file_uploader("📊 엑셀 파일 업로드 (여러 파일 가능)", type=['xlsx'], accept_multiple_files=True, key="m2_up")
+    if f_excels:
+        zip_buf = io.BytesIO()
+        first_biz = os.path.splitext(f_excels[0].name)[0].split(" ")[0]
+        with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
+            for f_excel in f_excels:
+                try:
+                    df_all = pd.read_excel(f_excel)
+                    pure_name = os.path.splitext(f_excel.name)[0].split(" ")[0]
+                    try:
+                        tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
+                        d_range = f"{tmp_d.min().strftime('%Y-%m-%d')} ~ {tmp_d.max().strftime('%Y-%m-%d')}"
+                    except: d_range = "2025년"
+                    type_col = next((c for c in ['구분', '유형'] if c in df_all.columns), None)
+                    if type_col:
+                        for g in ['매출', '매입']:
+                            tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
+                            if not tgt.empty:
+                                pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
+                                pdf_filename = f"2025 {pure_name} -하반기 {g}장.pdf"
+                                zf.writestr(pdf_filename, pdf_stream.getvalue())
+                except Exception as e: st.error(f"{f_excel.name} 오류: {e}")
+        st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_매출매입장_모음.zip", use_container_width=True)
 
 elif curr == st.session_state.config["menu_3"]:
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
     if card_ups:
         z_buf = io.BytesIO()
-        first_fn = card_ups[0].name.replace("2025 ", "").replace("2024 ", "")
-        zip_biz_name = first_fn.split('-')[0].split('_')[0].split(' ')[0].strip()
         success_count = 0
         with zipfile.ZipFile(z_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for card_up in card_ups:
@@ -169,7 +205,7 @@ elif curr == st.session_state.config["menu_3"]:
                             card_up.seek(0)
                             raw_df = pd.read_excel(card_up, header=None, engine='openpyxl')
                     
-                    date_k, partner_k, biz_num_k, amt_k = ['이용일','일자','승인일'], ['가맹점명','거래처','상호'], ['사업자등록번호','사업자번호','등록번호'], ['이용 금액','합계','승인금액','금액']
+                    date_k, partner_k, biz_num_k, amt_k = ['이용일','일자','승인일'], ['가맹점','거래처','상호'], ['사업자등록번호','사업자번호','등록번호'], ['이용 금액','합계','승인금액','금액']
                     header_idx = None
                     for i, row in raw_df.iterrows():
                         row_str = " ".join([str(v) for v in row.values if pd.notna(v)])
@@ -180,7 +216,6 @@ elif curr == st.session_state.config["menu_3"]:
                         df = raw_df.iloc[header_idx+1:].copy()
                         df.columns = [str(c).strip() for c in raw_df.iloc[header_idx].values]
                         df = df.dropna(how='all', axis=0)
-                        
                         d_col = next((c for c in df.columns if any(k in str(c) for k in date_k)), None)
                         p_col = next((c for c in df.columns if any(k in str(c) for k in partner_k)), None)
                         b_col = next((c for c in df.columns if any(k in str(c) for k in biz_num_k)), None)
@@ -200,20 +235,14 @@ elif curr == st.session_state.config["menu_3"]:
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 df[f_cols].to_excel(writer, index=False)
                             
-                            # --- [파일명 규칙 복구] ---
-                            # '2025 업체명 -하반기...' 형식 추출
                             original_fn = os.path.splitext(card_up.name)[0]
-                            biz_name = original_fn.split('-')[0].strip()
-                            # 만약 파일명에 '2025'가 없다면 붙여줌
-                            if "2025" not in biz_name: biz_name = f"2025 {biz_name}"
-                            
-                            # 최종 파일명: 2025 업체명 -하반기 카드매입_업로드용.xlsx
-                            final_filename = f"{biz_name} -하반기 카드매입_업로드용.xlsx"
+                            biz_part = original_fn.split('-')[0].strip()
+                            if "2025" not in biz_part: biz_part = f"2025 {biz_part}"
+                            final_filename = f"{biz_part} -하반기 카드매입_업로드용.xlsx"
                             zf.writestr(final_filename, excel_buf.getvalue())
                             success_count += 1
-                except Exception as e:
-                    st.error(f"❌ {card_up.name} 처리 중 오류 발생: {e}")
+                except Exception as e: st.error(f"{card_up.name} 오류: {e}")
         
         if success_count > 0:
             st.success(f"✅ {success_count}개 파일 변환 완료!")
-            st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"{zip_biz_name}_위하고용.zip", use_container_width=True)
+            st.download_button("📥 결과(ZIP) 다운로드", z_buf.getvalue(), f"카드매입_위하고용_모음.zip", use_container_width=True)
