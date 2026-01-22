@@ -12,7 +12,7 @@ from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-# --- [1. 기초 엔진 및 폰트 설정] ---
+# --- [1. 기초 엔진] ---
 try:
     font_path = "malgun.ttf"
     if os.path.exists(font_path):
@@ -135,6 +135,7 @@ curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
+# Home 메뉴
 if curr == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c_top1, c_top2 = st.columns(2)
@@ -151,17 +152,28 @@ if curr == st.session_state.config["menu_0"]:
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
+# 메뉴 1: 마감작업 (안내문 생성)
 elif curr == st.session_state.config["menu_1"]:
     st.subheader("📝 완성된 안내문 (복사용)")
+    # [수정] 안내문 템플릿 수정 칸 (기존 로직 복구)
+    with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
+        new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
+                                     value=st.session_state.config["prompt_template"], height=250)
+        if st.button("템플릿 저장"):
+            st.session_state.config["prompt_template"] = new_template
+            st.success("템플릿이 저장되었습니다!")
+
     p_h = st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
     p_l = st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
     all_up = (p_h if p_h else []) + (p_l if p_l else [])
+    
     if all_up:
         res = extract_data_from_pdf(all_up)
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
         msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
         st.code(msg, language="text")
 
+# 메뉴 2: 매출매입장 PDF 변환
 elif curr == st.session_state.config["menu_2"]:
     f_excels = st.file_uploader("📊 엑셀 파일 업로드 (여러 파일 가능)", type=['xlsx'], accept_multiple_files=True, key="m2_up")
     if f_excels:
@@ -187,6 +199,7 @@ elif curr == st.session_state.config["menu_2"]:
                 except Exception as e: st.error(f"{f_excel.name} 오류: {e}")
         st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_매출매입장_모음.zip", use_container_width=True)
 
+# 메뉴 3: 카드매입 수기입력건
 elif curr == st.session_state.config["menu_3"]:
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
