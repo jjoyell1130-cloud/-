@@ -135,7 +135,6 @@ curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
 
-# Home 메뉴
 if curr == st.session_state.config["menu_0"]:
     st.subheader("🔗 바로가기")
     c_top1, c_top2 = st.columns(2)
@@ -152,17 +151,10 @@ if curr == st.session_state.config["menu_0"]:
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
-# 메뉴 1: 마감작업 (안내문 생성)
+# 메뉴 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
+    # 1. 완성된 안내문 (상단 배치)
     st.subheader("📝 완성된 안내문 (복사용)")
-    # [수정] 안내문 템플릿 수정 칸 (기존 로직 복구)
-    with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
-        new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
-                                     value=st.session_state.config["prompt_template"], height=250)
-        if st.button("템플릿 저장"):
-            st.session_state.config["prompt_template"] = new_template
-            st.success("템플릿이 저장되었습니다!")
-
     p_h = st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
     p_l = st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
     all_up = (p_h if p_h else []) + (p_l if p_l else [])
@@ -172,6 +164,18 @@ elif curr == st.session_state.config["menu_1"]:
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
         msg = st.session_state.config["prompt_template"].format(업체명=biz, 결과=res["결과"], 매출액=res["매출액"], 매입액=res["매입액"], 세액=res["세액"])
         st.code(msg, language="text")
+    else:
+        st.info("PDF 파일을 업로드하면 안내문이 이곳에 생성됩니다.")
+
+    st.divider()
+
+    # 2. 템플릿 수정 (하단 배치)
+    with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
+        new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
+                                     value=st.session_state.config["prompt_template"], height=250)
+        if st.button("템플릿 저장"):
+            st.session_state.config["prompt_template"] = new_template
+            st.success("템플릿이 저장되었습니다!")
 
 # 메뉴 2: 매출매입장 PDF 변환
 elif curr == st.session_state.config["menu_2"]:
