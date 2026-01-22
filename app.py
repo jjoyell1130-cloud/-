@@ -171,12 +171,10 @@ elif curr == st.session_state.config["menu_2"]:
     f_pdfs = st.file_uploader("📊 엑셀 파일 업로드 (여러 파일 가능)", type=['xlsx'], accept_multiple_files=True, key="m2_up")
     if f_pdfs:
         zip_buf = io.BytesIO()
-        # 확장자를 제거한 순수 업체명만 추출
         first_biz = os.path.splitext(f_pdfs[0].name)[0].split(" ")[0]
         with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED) as zf:
             for f_pdf in f_pdfs:
                 df_all = pd.read_excel(f_pdf)
-                # 각 파일별로도 확장자를 제거하고 업체명만 가져옴
                 pure_name = os.path.splitext(f_pdf.name)[0].split(" ")[0]
                 try:
                     tmp_d = pd.to_datetime(df_all['전표일자'], errors='coerce').dropna()
@@ -188,11 +186,11 @@ elif curr == st.session_state.config["menu_2"]:
                         tgt = df_all[df_all[type_col].astype(str).str.contains(g, na=False)].reset_index(drop=True)
                         if not tgt.empty:
                             pdf_stream = make_pdf_stream(tgt, f"{g} 장", pure_name, d_range)
-                            # 요청하신 대로 2025 업체명 매출장 형식으로 저장 (확장자 중복 제거됨)
-                            pdf_filename = f"2025 {pure_name} {g}장.pdf"
+                            # 요청하신 규칙: 2025 업체명 하반기 매출장or매입장
+                            pdf_filename = f"2025 {pure_name} 하반기 {g}장.pdf"
                             zf.writestr(pdf_filename, pdf_stream.getvalue())
         st.success(f"✅ {len(f_pdfs)}개 파일 처리 완료")
-        st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_매출매입장_모음.zip", use_container_width=True)
+        st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_하반기_매출매입장_모음.zip", use_container_width=True)
 
 elif curr == st.session_state.config["menu_3"]:
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
