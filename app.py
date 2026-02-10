@@ -63,6 +63,10 @@ def make_pdf_stream(data, title, biz_name, date_range):
     rows_per_page = 26
     actual_item_count = 0 
     summary_keywords = ['합계', '월계', '분기', '반기', '누계']
+    
+    # [수정] 데이터 전체의 NaN 값을 빈 문자열로 처리하여 오류 방지
+    data = data.fillna("")
+    
     y_start = height - 133
     for i in range(len(data)):
         if i % rows_per_page == 0:
@@ -78,28 +82,39 @@ def make_pdf_stream(data, title, biz_name, date_range):
             c.drawString(180, yh, "거래처(적요)"); c.drawRightString(420, yh, "공급가액")
             c.drawRightString(485, yh, "부가가치세"); c.drawRightString(550, yh, "합계")
             c.line(40, yh - 8, 555, yh - 8); y_start = yh - 28
+            
         row = data.iloc[i]
         cur_y = y_start - ((i % rows_per_page) * 23)
-        txt = (str(row.get('번호', '')) + str(row.get('거래처', ''))).replace(" ", "")
+        
+        # [수정] 카드/현금영수증 매출 시 거래처가 NaN인 경우 처리
+        raw_partner = str(row.get('거래처', '')).strip()
+        if raw_partner == "":
+            # 비고나 유형 컬럼에서 카드/현금 매출 정보 가져오기
+            raw_partner = str(row.get('비고', row.get('유형', '카드/현금 매출')))
+            
+        txt = (str(row.get('번호', '')) + raw_partner).replace(" ", "")
         is_summary = any(k in txt for k in summary_keywords)
+        
         c.setFont(FONT_NAME, 8.5)
         if is_summary:
-            c.setFont(FONT_NAME, 9); c.drawString(90, cur_y, str(row.get('거래처', row.get('번호', ''))))
+            c.setFont(FONT_NAME, 9); c.drawString(90, cur_y, raw_partner)
             c.line(40, cur_y + 16, 555, cur_y + 16); c.line(40, cur_y - 7, 555, cur_y - 7)
         else:
             actual_item_count += 1
             c.drawString(45, cur_y, str(actual_item_count))
             raw_date = row.get('전표일자', row.get('일자', ''))
-            c.drawString(85, cur_y, str(raw_date)[:10] if pd.notna(raw_date) else "")
-            c.drawString(170, cur_y, str(row.get('거래처', ''))[:25])
+            c.drawString(85, cur_y, str(raw_date)[:10] if raw_date != "" else "")
+            c.drawString(170, cur_y, raw_partner[:25])
             c.setStrokeColor(colors.lightgrey); c.line(40, cur_y - 7, 555, cur_y - 7); c.setStrokeColor(colors.black)
+            
         c.drawRightString(410, cur_y, f"{to_int(row.get('공급가액', 0)):,}")
         c.drawRightString(485, cur_y, f"{to_int(row.get('부가세', 0)):,}")
         c.drawRightString(550, cur_y, f"{to_int(row.get('합계', 0)):,}")
+        
     c.save(); buffer.seek(0)
     return buffer
 
-# --- [2. 세션 및 레이아웃] ---
+# --- 이하 세션 로직 및 메뉴 구성 (기존 코드 유지) ---
 if 'config' not in st.session_state:
     st.session_state.config = {
         "menu_0": "🏠 Home", "menu_1": "⚖️ 마감작업", "menu_2": "📁 매출매입장 PDF 변환", "menu_3": "💳 카드매입 수기입력건",
@@ -130,7 +145,6 @@ with st.sidebar:
             st.session_state.selected_menu = m_name
             st.rerun()
 
-# --- [3. 메뉴별 메인 로직] ---
 curr = st.session_state.selected_menu
 st.title(curr)
 st.divider()
@@ -151,17 +165,11 @@ if curr == st.session_state.config["menu_0"]:
     df_acc = pd.DataFrame(acc_data, columns=["항목", "구분", "계정과목", "코드"])
     st.dataframe(df_acc, use_container_width=True, height=600, hide_index=True)
 
-# 메뉴 1: 마감작업
 elif curr == st.session_state.config["menu_1"]:
-    # 1. 안내문 (최상단)
     st.subheader("📝 안내문")
-    
-    # 세션에서 파일 업로드 객체 가져오기 (rerun 시에도 유지)
     p_h = st.session_state.get("m1_pdf_up", [])
     p_l = st.session_state.get("m1_ledger_up", [])
-    
     all_up = (p_h if p_h else []) + (p_l if p_l else [])
-    
     if all_up:
         res = extract_data_from_pdf(all_up)
         biz = all_up[0].name.split("_")[0] if "_" in all_up[0].name else all_up[0].name.split(" ")[0]
@@ -169,25 +177,17 @@ elif curr == st.session_state.config["menu_1"]:
         st.code(msg, language="text")
     else:
         st.info("파일을 업로드하면 안내문이 이곳에 생성됩니다.")
-
     st.divider()
-
-    # 2. 파일 업로드 (중간)
     col1, col2 = st.columns(2)
     with col1: st.file_uploader("📄 국세청 PDF", type=['pdf'], accept_multiple_files=True, key="m1_pdf_up")
     with col2: st.file_uploader("📊 매출매입장 PDF", type=['pdf'], accept_multiple_files=True, key="m1_ledger_up")
-
     st.divider()
-
-    # 3. 템플릿 수정 (하단)
     with st.expander("✉️ 안내문 템플릿 수정", expanded=False):
-        new_template = st.text_area("템플릿 내용 ({업체명}, {결과}, {매출액} 등 변수 포함 가능)", 
-                                     value=st.session_state.config["prompt_template"], height=250)
+        new_template = st.text_area("템플릿 내용", value=st.session_state.config["prompt_template"], height=250)
         if st.button("템플릿 저장"):
             st.session_state.config["prompt_template"] = new_template
             st.success("템플릿이 저장되었습니다!")
 
-# 메뉴 2: 매출매입장 PDF 변환
 elif curr == st.session_state.config["menu_2"]:
     f_excels = st.file_uploader("📊 엑셀 파일 업로드 (여러 파일 가능)", type=['xlsx'], accept_multiple_files=True, key="m2_up")
     if f_excels:
@@ -213,7 +213,6 @@ elif curr == st.session_state.config["menu_2"]:
                 except Exception as e: st.error(f"{f_excel.name} 오류: {e}")
         st.download_button("🎁 ZIP 다운로드", data=zip_buf.getvalue(), file_name=f"{first_biz}_매출매입장_모음.zip", use_container_width=True)
 
-# 메뉴 3: 카드매입 수기입력건
 elif curr == st.session_state.config["menu_3"]:
     st.info("카드내역서 엑셀파일을 업로드하시면 위하고 업로드용으로 자동 변환됩니다.")
     card_ups = st.file_uploader("카드사 엑셀/CSV 업로드", type=['xlsx', 'csv', 'xls'], accept_multiple_files=True, key="card_m3_final")
@@ -256,12 +255,10 @@ elif curr == st.session_state.config["menu_3"]:
                             df = df[df['합계'] > 0].copy()
                             df['공급가액'] = (df['합계'] / 1.1).round(0).astype(int)
                             df['부가세'] = df['합계'] - df['공급가액']
-                            
                             f_cols = ['일자', '거래처', '사업자번호', '품명', '공급가액', '부가세', '합계']
                             excel_buf = io.BytesIO()
                             with pd.ExcelWriter(excel_buf, engine='xlsxwriter') as writer:
                                 df[f_cols].to_excel(writer, index=False)
-                            
                             original_fn = os.path.splitext(card_up.name)[0]
                             biz_part = original_fn.split('-')[0].strip()
                             if "2025" not in biz_part: biz_part = f"2025 {biz_part}"
